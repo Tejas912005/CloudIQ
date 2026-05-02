@@ -1,0 +1,53 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+dist/
+build/
+.eggs/
+*.egg
+
+# Environment
+.env
+.env.*
+!.env.example
+
+# Database
+*.db
+*.sqlite
+*.sqlite3
+
+# Logs / dev artifacts
+out.txt
+err.txt
+*.log
+
+# Node
+node_modules/
+.npm/
+
+# Build outputs
+dist/
+.vite/
+*.local
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+
+# Test artifacts
+test_gemini*.py
+
+# Vector DB — contains user chat embeddings, should never be committed
+chroma_db/
+
+# Zip archives — should never be committed
+*.zip
+backend.zip
+frontend.zip

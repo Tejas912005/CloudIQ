@@ -1,0 +1,1064 @@
+╔══════════════════════════════════════════════════════════════════════════════════════╗
+║        CLOUDIQ v8 → v9 TRANSFORMATION PLAN                                         ║
+║        Security fixes · Deployment fixes · 2 persistent bugs · Auth completion     ║
+║        Generated from complete codebase analysis — April 2026                      ║
+╚══════════════════════════════════════════════════════════════════════════════════════╝
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+SECTION 0 — DO NOT DELETE THESE (cleanup plan is wrong)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+The cleanup plan proposes deleting files that are actively imported and called.
+
+KEEP — these are actively used:
+  backend/agent_planner.py     ← imported by chat_controller._run_agent_loop()
+  backend/agent_executor.py    ← imported by chat_controller._run_agent_loop()
+  backend/agent_reflector.py   ← imported by chat_controller._run_agent_loop()
+  backend/agent_decider.py     ← imported by chat_controller._run_agent_loop()
+  backend/gemini_config.py     ← imported by agent_planner, reflector, decider
+  backend/routers/legacy.py    ← included in main.py lines 145-146
+  _run_agent_loop() function   ← called by routers/chat.py for agent_mode intent
+
+SAFE TO DELETE — truly orphaned:
+  backend/ai_client_gemini.py          ← nothing imports this anywhere
+  backend/services/ollama_service.py   ← replaced by groq_service in langchain_router
+
+DO NOT DELETE ANYTHING ELSE.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+SECTION 1 — IMMEDIATE SECURITY ACTIONS (do before anything else — 10 minutes)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+ACTION 1 — Reset Supabase database password RIGHT NOW
+  Go to: https://supabase.com → your project → Settings → Database
+  Click "Reset database password"
+  Copy the new password
+  Update backend/.env with the new DATABASE_URL
+
+  WHY: Your full PostgreSQL connection string including password is committed
+  in backend/.env and visible in every zip you share. Anyone with that URL
+  has full read/write access to your production Supabase database.
+
+ACTION 2 — Regenerate Gemini API key
+  Go to: https://aistudio.google.com/apikey
+  Delete old key: AIzaSyAvt8eT2TfMU0k8UoTxcjyEYFuWUBMzKJk
+  Create new key, update backend/.env
+
+ACTION 3 — Run git commands to untrack sensitive files
+  cd CloudIQ
+  git rm --cached backend/.env
+  git rm --cached frontend/.env.local
+  git rm -r --cached backend/chroma_db/
+  git rm --cached backend/cloudiq.db
+  git rm -f backend/ai_client_gemini.py
+  git rm -f backend/services/ollama_service.py
+
+ACTION 4 — Update .gitignore to prevent future commits
+  Add to backend/.gitignore:
+    .env
+    *.db
+    chroma_db/
+    __pycache__/
+    *.pyc
+
+  Add to frontend/.gitignore:
+    .env.local
+    .env.production
+    .env.development
+
+  Add to root .gitignore:
+    *.zip
+    backend.zip
+    frontend.zip
+
+  git add .gitignore backend/.gitignore frontend/.gitignore
+  git commit -m "security: untrack secrets, db files, and chroma data"
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+SECTION 2 — DEPLOYMENT CRASH FIXES (project won't deploy without these)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+╔═══════════════════════════════════════════════════════════════╗
+║ DEPLOY FIX #1 — requirements.txt will crash Render           ║
+╚═══════════════════════════════════════════════════════════════╝
+
+FILE: backend/requirements.txt
+
+PROBLEM:
+  These packages will cause Render deployment to fail:
+  - sentence-transformers: downloads 400MB model on startup → RAM limit exceeded
+  - langchain-ollama: requires Ollama running locally → crashes on cloud server
+  - crewai: not used anywhere in the codebase → wasted 200MB install
+  - langchain, langchain-community: not actually imported anywhere in code
+  ChromaDB uses sentence-transformers for embeddings by default on cloud.
+
+SOLUTION — Replace heavy embedding approach with ChromaDB's lightweight option:
+  ChromaDB can use its own built-in embedding function that doesn't require
+  sentence-transformers. Change rag_memory.py to use the default embedding.
+
+UPDATED requirements.txt:
+─────────────────────────────────────────────────────────────────
+# CloudIQ v9 Backend Dependencies
+# Install: pip install -r requirements.txt
+
+# ── Web Framework ─────────────────────
+fastapi>=0.111.0
+uvicorn[standard]>=0.29.0
+
+# ── Database ──────────────────────────
+sqlalchemy>=2.0.0
+psycopg2-binary>=2.9.0
+
+# ── Data / ML ─────────────────────────
+numpy>=1.26.0
+scikit-learn>=1.4.0
+pandas>=2.2.0
+scipy>=1.13.0
+
+# ── Graph Engine ──────────────────────
+networkx>=3.3
+
+# ── AI / Gemini ───────────────────────
+google-genai
+
+# ── RAG Memory ────────────────────────
+chromadb>=0.5.0
+
+# ── Utilities ─────────────────────────
+python-multipart>=0.0.9
+─────────────────────────────────────────────────────────────────
+
+REMOVED:
+  langchain, langchain-community, langchain-ollama  ← not imported in code
+  sentence-transformers                              ← 400MB, crashes Render
+  crewai                                             ← not used anywhere
+
+NOTE: langchain_router.py is named "langchain" but doesn't import langchain.
+      It calls gemini_service and groq_service directly. No langchain needed.
+
+
+╔═══════════════════════════════════════════════════════════════╗
+║ DEPLOY FIX #2 — rag_memory.py uses default embedding (heavy) ║
+╚═══════════════════════════════════════════════════════════════╝
+
+FILE: backend/services/rag_memory.py
+
+PROBLEM:
+  chromadb.PersistentClient with default settings uses sentence-transformers
+  for embeddings when you call collection.query(query_texts=[...]).
+  This triggers a 400MB model download on first startup — crashes Render.
+
+FIX — Use ChromaDB's built-in lightweight embedding function:
+─────────────────────────────────────────────────────────────────
+import chromadb
+from chromadb.utils import embedding_functions
+import uuid
+import logging
+import os
+
+logger = logging.getLogger("cloudiq.rag")
+
+DB_DIR = os.path.join(os.path.dirname(__file__), "..", "chroma_db")
+
+# Use ChromaDB's lightweight default embedding (no sentence-transformers needed)
+# On Render/cloud: this uses a simple character-level hash for similarity
+# It's less semantically accurate than transformers but works without 400MB downloads
+_default_ef = embedding_functions.DefaultEmbeddingFunction()
+
+try:
+    os.makedirs(DB_DIR, exist_ok=True)
+    chroma_client = chromadb.PersistentClient(path=DB_DIR)
+    chat_collection = chroma_client.get_or_create_collection(
+        name="chat_history",
+        embedding_function=_default_ef,   # ← explicit lightweight embedding
+    )
+    logger.info("[RAG] ChromaDB initialized with default embedding function")
+except Exception as e:
+    logger.error(f"[RAG] Failed to initialize ChromaDB: {e}")
+    chat_collection = None
+
+# store_interaction() and retrieve_relevant_history() stay exactly the same
+─────────────────────────────────────────────────────────────────
+
+NOTE: This trades semantic accuracy for cloud compatibility.
+      For a portfolio project this is the right tradeoff.
+      The RAG still retrieves related past conversations — just
+      by simpler similarity rather than deep semantic embedding.
+
+
+╔═══════════════════════════════════════════════════════════════╗
+║ DEPLOY FIX #3 — CORS must match actual deployment URL        ║
+╚═══════════════════════════════════════════════════════════════╝
+
+FILE: backend/core/config.py + render.yaml
+
+PROBLEM:
+  render.yaml has CORS_ORIGINS = "https://cloudiq.vercel.app"
+  But your actual Vercel URL will be different (based on project name).
+  If URLs don't match exactly, the browser blocks all API calls with CORS error.
+
+FIX — Update render.yaml after you know your Vercel URL:
+  After deploying to Vercel, copy the exact URL (e.g. cloudiq-xyz.vercel.app)
+  Go to Render dashboard → cloudiq-backend → Environment Variables
+  Update CORS_ORIGINS to your exact Vercel URL
+
+  Also update config.py to have a reasonable default:
+    CORS_ORIGINS = [
+        o.strip() for o in os.environ.get(
+            "CORS_ORIGINS",
+            "http://localhost:5173,http://localhost:3000"
+        ).split(",")
+        if o.strip()
+    ]
+  Production URL comes from Render env var, not from code.
+
+
+╔═══════════════════════════════════════════════════════════════╗
+║ DEPLOY FIX #4 — Frontend needs VITE_API_URL for production   ║
+╚═══════════════════════════════════════════════════════════════╝
+
+FILE: frontend/src/lib/api.js
+
+CHECK: Does api.js use import.meta.env.VITE_API_URL?
+  If NOT → all API calls will fail in production (calls localhost:8000)
+  If YES → skip this fix
+
+FIX (if missing) — Add to top of api.js:
+  const API_BASE = import.meta.env.VITE_API_URL || '';
+
+  Update every fetch() call:
+  Was: fetch(path, ...)
+  Now: fetch(`${API_BASE}${path}`, ...)
+
+ALSO CREATE: frontend/.env.production (not committed — add to .gitignore)
+  VITE_API_URL=https://cloudiq-backend.onrender.com
+
+  On Vercel dashboard → project → Environment Variables → add:
+  VITE_API_URL = https://cloudiq-backend.onrender.com
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+SECTION 3 — 2 PERSISTENT BUG FIXES (reported 4 times each)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+╔═══════════════════════════════════════════════════════════════╗
+║ BUG #1 — WhatIfSimulator wrong data path (4th report)        ║
+╚═══════════════════════════════════════════════════════════════╝
+
+FILE: frontend/src/components/dashboard/WhatIfSimulator.jsx
+LINES: 14 and 15
+
+CURRENT (wrong — .resources. nesting does not exist, || 5 is fake data):
+  const idleCount = platform.rawSummary?.resources?.idle_count || 5;
+  const totalCost = platform.rawSummary?.resources?.total_monthly_cost
+                    || platform.beforeAfter?.before || 0;
+
+CORRECT:
+  const idleCount = platform.rawSummary?.idle_count || 0;
+  const totalCost = platform.rawSummary?.total_monthly_cost || 0;
+
+WHY:
+  commandCenter.js sets rawSummary = snapshot.analyze
+  /api/analyze returns fields at the top level: {idle_count, total_monthly_cost, ...}
+  There is no .resources sub-object inside rawSummary
+  The || 5 fallback hides the bug but shows fake data
+
+VERIFICATION:
+  Open Dashboard → drag the What-If slider
+  "Projected Monthly" must show a real number matching total cost
+  "You Save" must update smoothly as slider moves
+  If slider is maxed and "You Save" is still $0 → fix not applied
+
+
+╔═══════════════════════════════════════════════════════════════╗
+║ BUG #2 — Page transitions broken (4th report)                ║
+╚═══════════════════════════════════════════════════════════════╝
+
+FILE: frontend/src/App.jsx
+
+CURRENT (wrong — key on Routes, PageWrapper per route):
+  <AnimatePresence mode="wait">
+    <Routes location={location} key={location.pathname}>
+      <Route path="/" element={<PageWrapper><ErrorBoundary ...>
+
+WHY IT DOESN'T WORK:
+  AnimatePresence animates its direct children when their key changes.
+  <Routes> is the direct child — it has key={location.pathname}.
+  But <Routes> is not a motion component — framer-motion ignores it.
+  PageWrapper (motion.div) per route: AnimatePresence can't coordinate
+  multiple motion.div children exiting/entering simultaneously.
+  Result: instant snap on every navigation.
+
+CORRECT STRUCTURE:
+  Single motion.div as direct child of AnimatePresence
+  key={location.pathname} on that motion.div
+  Routes INSIDE the motion.div (no key on Routes)
+  No PageWrapper needed
+
+CORRECT CODE:
+─────────────────────────────────────────────────────────────────
+const pageVariants = {
+  initial: { opacity: 0, y: 10 },
+  animate: {
+    opacity: 1, y: 0,
+    transition: { duration: 0.22, ease: [0.16, 1, 0.3, 1] }
+  },
+  exit: {
+    opacity: 0, y: -6,
+    transition: { duration: 0.15, ease: 'easeIn' }
+  },
+};
+
+function AnimatedRoutes() {
+  const location = useLocation();
+  return (
+    <AnimatePresence mode="wait">
+      <motion.div
+        key={location.pathname}
+        variants={pageVariants}
+        initial="initial"
+        animate="animate"
+        exit="exit"
+        style={{ minHeight: '100%', width: '100%' }}
+      >
+        <Routes location={location}>
+          <Route path="/"
+            element={<ErrorBoundary routeKey={location.pathname}><Dashboard /></ErrorBoundary>}
+          />
+          <Route path="/assistant"
+            element={<ErrorBoundary routeKey={location.pathname}><Assistant /></ErrorBoundary>}
+          />
+          <Route path="/insights"
+            element={<ErrorBoundary routeKey={location.pathname}><Insights /></ErrorBoundary>}
+          />
+          <Route path="/actions"
+            element={<ErrorBoundary routeKey={location.pathname}><Recommendations /></ErrorBoundary>}
+          />
+          <Route path="/activity"
+            element={<ErrorBoundary routeKey={location.pathname}><Activity /></ErrorBoundary>}
+          />
+          <Route path="/graph"
+            element={<ErrorBoundary routeKey={location.pathname}><GraphView /></ErrorBoundary>}
+          />
+          <Route path="/globe"
+            element={<ErrorBoundary routeKey={location.pathname}><Globe /></ErrorBoundary>}
+          />
+          <Route path="/resources"
+            element={<ErrorBoundary routeKey={location.pathname}><Resources /></ErrorBoundary>}
+          />
+          <Route path="/predictions"
+            element={<ErrorBoundary routeKey={location.pathname}><Predictions /></ErrorBoundary>}
+          />
+          <Route path="/chatbot" element={<Navigate to="/assistant" replace />} />
+          <Route path="/cost-analysis" element={<Navigate to="/insights" replace />} />
+          <Route path="/recommendations" element={<Navigate to="/actions" replace />} />
+          <Route path="*" element={<Navigate to="/" replace />} />
+        </Routes>
+      </motion.div>
+    </AnimatePresence>
+  );
+}
+─────────────────────────────────────────────────────────────────
+DELETE the PageWrapper component (lines 43-53 in current App.jsx).
+Keep all imports, CloudIQProvider, Router, AppShell, Suspense unchanged.
+
+VERIFICATION:
+  Navigate Dashboard → Assistant → Insights → back
+  Each transition should fade out (opacity 0, move up slightly)
+  then new page fades in (opacity 0, y:10 → opacity 1, y:0)
+  Total duration: ~220ms. Should feel smooth not jarring.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+SECTION 4 — COMPLETE AUTHENTICATION (wire the half-built Supabase auth)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+STATUS: AuthModal.jsx is built. supabase.js is initialized.
+        Missing: auth state management, login button, route protection.
+
+╔═══════════════════════════════════════════════════════════════╗
+║ AUTH #1 — Add auth state to useCloudStore                     ║
+╚═══════════════════════════════════════════════════════════════╝
+
+FILE: frontend/src/store/useCloudStore.js
+
+ADD auth slice to Zustand store:
+─────────────────────────────────────────────────────────────────
+// Add these imports at top:
+import { supabase } from '../lib/supabase';
+
+// Add to the create() state object:
+  // ── Auth state ────────────────────────────────
+  user: null,
+  authLoading: true,
+
+// Add to actions:
+  initAuth: async () => {
+    // Check existing session on app load
+    const { data: { session } } = await supabase.auth.getSession();
+    set({ user: session?.user || null, authLoading: false });
+
+    // Listen for auth changes
+    supabase.auth.onAuthStateChange((_event, session) => {
+      set({ user: session?.user || null });
+    });
+  },
+
+  signOut: async () => {
+    await supabase.auth.signOut();
+    set({ user: null });
+  },
+─────────────────────────────────────────────────────────────────
+
+
+╔═══════════════════════════════════════════════════════════════╗
+║ AUTH #2 — Call initAuth on app startup                        ║
+╚═══════════════════════════════════════════════════════════════╝
+
+FILE: frontend/src/context/CloudIQContext.jsx
+
+ADD to the provider useEffect that runs on mount:
+─────────────────────────────────────────────────────────────────
+  useEffect(() => {
+    // Initialize auth state from existing Supabase session
+    useCloudStore.getState().initAuth();
+    // ... existing refreshData() call
+  }, []);
+─────────────────────────────────────────────────────────────────
+
+
+╔═══════════════════════════════════════════════════════════════╗
+║ AUTH #3 — Add login button to TopHeader                       ║
+╚═══════════════════════════════════════════════════════════════╝
+
+FILE: frontend/src/components/layout/TopHeader.jsx
+
+ADD to the right section of TopHeader:
+─────────────────────────────────────────────────────────────────
+// Add to imports:
+import { LogIn, LogOut, User } from 'lucide-react';
+import { useState } from 'react';
+import AuthModal from '../auth/AuthModal';
+
+// Inside TopHeader component:
+const user = useCloudStore(state => state.user);
+const signOut = useCloudStore(state => state.signOut);
+const [showAuth, setShowAuth] = useState(false);
+
+// In the right section JSX, add:
+{user ? (
+  // Logged in — show user avatar + signout
+  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+    <div style={{
+      width: '28px', height: '28px', borderRadius: '50%',
+      background: 'var(--accent-soft)', border: '1px solid var(--accent-border)',
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+    }}>
+      <User size={14} style={{ color: 'var(--accent)' }} />
+    </div>
+    <span style={{ fontSize: '11px', color: 'var(--text-muted)', maxWidth: '100px',
+                   overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+      {user.email?.split('@')[0]}
+    </span>
+    <button onClick={signOut} className="btn-icon h-7 w-7 !p-0" title="Sign out">
+      <LogOut size={13} />
+    </button>
+  </div>
+) : (
+  // Not logged in — show login button
+  <button
+    onClick={() => setShowAuth(true)}
+    style={{
+      display: 'flex', alignItems: 'center', gap: '6px',
+      padding: '4px 12px', borderRadius: '8px', fontSize: '12px',
+      fontWeight: 600, background: 'var(--accent)', color: '#060a14',
+      border: 'none', cursor: 'pointer',
+    }}
+  >
+    <LogIn size={13} />
+    Sign In
+  </button>
+)}
+
+{showAuth && <AuthModal onClose={() => setShowAuth(false)} />}
+─────────────────────────────────────────────────────────────────
+
+
+╔═══════════════════════════════════════════════════════════════╗
+║ AUTH #4 — Complete AuthModal.jsx (add close button + styles) ║
+╚═══════════════════════════════════════════════════════════════╝
+
+FILE: frontend/src/components/auth/AuthModal.jsx
+
+Read the current file first. ADD the missing pieces:
+
+1. onClose prop handler — when user clicks backdrop, call onClose()
+2. Close (X) button in top-right corner of modal
+3. Proper overlay with backdrop:
+   position fixed, inset 0, rgba(0,0,0,0.65) bg, blur(8px)
+   z-index 100, flex, align center
+4. After successful auth (onAuthStateChange fires), call onClose()
+
+Current file likely has form but no close mechanism.
+The modal should close automatically when supabase.auth detects sign-in.
+
+DETECT SUCCESSFUL AUTH IN MODAL:
+─────────────────────────────────────────────────────────────────
+  useEffect(() => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      (event, session) => {
+        if (session && (event === 'SIGNED_IN' || event === 'USER_UPDATED')) {
+          onClose(); // auto-close modal on successful sign-in
+        }
+      }
+    );
+    return () => subscription.unsubscribe();
+  }, [onClose]);
+─────────────────────────────────────────────────────────────────
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+SECTION 5 — ADD GROQ_API_KEY TO ENV FILES
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+FILE: backend/.env.example
+
+ADD:
+  # ── Groq (Free Llama 3 — cloud-native, no local install needed) ──
+  # Get free key at: https://console.groq.com
+  GROQ_API_KEY=your_groq_key_here
+  GROQ_MODEL=llama3-8b-8192
+
+FILE: backend/render.yaml — ADD env var:
+  - key: GROQ_API_KEY
+    sync: false
+
+Get free Groq key at https://console.groq.com (no credit card needed).
+Add to Render dashboard environment variables after getting key.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+SECTION 6 — COMPLETE DEPLOYMENT CHECKLIST
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+BACKEND (Render):
+  □ Reset Supabase DB password
+  □ Regenerate Gemini API key
+  □ Get free Groq API key at console.groq.com
+  □ Fix requirements.txt (remove heavy packages)
+  □ Fix rag_memory.py (use default embedding function)
+  □ Push to GitHub
+  □ Create Render web service (connect GitHub repo)
+     Root Dir: backend
+     Build: pip install -r requirements.txt
+     Start: uvicorn main:app --host 0.0.0.0 --port $PORT
+  □ Set Render env vars:
+     GEMINI_API_KEY = new key
+     GROQ_API_KEY = groq key
+     DATABASE_URL = new supabase URL with new password
+     CORS_ORIGINS = (set after Vercel deploy)
+  □ Deploy → get URL like cloudiq-backend.onrender.com
+
+FRONTEND (Vercel):
+  □ Ensure api.js uses VITE_API_URL env variable
+  □ Push to GitHub
+  □ Import project on vercel.com
+     Framework: Vite
+     Root Dir: frontend
+     Build: npm run build
+     Output: dist
+  □ Set Vercel env vars:
+     VITE_API_URL = https://cloudiq-backend.onrender.com
+     VITE_SUPABASE_URL = your supabase url
+     VITE_SUPABASE_ANON_KEY = your anon key
+  □ Deploy → get URL like cloudiq-xyz.vercel.app
+
+AFTER BOTH DEPLOYED:
+  □ Go to Render → cloudiq-backend → Environment Variables
+     Update CORS_ORIGINS = https://cloudiq-xyz.vercel.app
+     (your exact Vercel URL)
+  □ Trigger Render redeploy
+  □ Test: open Vercel URL in browser
+  □ Test: type a message in AI assistant → should stream
+  □ Test: say "dark theme" → UI should change colors
+  □ Test: say "simulate ransomware attack" → attack simulation runs
+  □ Test: login with email → AuthModal appears → sign in works
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+SECTION 7 — EXECUTION ORDER
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+TODAY (30 minutes — security):
+  1. Reset Supabase password
+  2. Regenerate Gemini API key
+  3. Get Groq API key
+  4. Run all git rm --cached commands
+  5. Update .gitignore files
+  6. Commit security cleanup
+
+THIS SESSION (1-2 hours — fixes):
+  7. Fix requirements.txt (remove heavy packages)
+  8. Fix rag_memory.py (use default embedding)
+  9. Fix WhatIfSimulator.jsx (remove .resources. from lines 14-15)
+  10. Fix App.jsx (move key to motion.div, remove PageWrapper)
+  11. Update api.js (add VITE_API_URL support)
+  12. Add Groq key to .env.example and render.yaml
+  13. Test locally: uvicorn main:app --reload + npm run dev
+
+NEXT SESSION (1 hour — auth):
+  14. Wire auth state in useCloudStore
+  15. Call initAuth in CloudIQContext
+  16. Add login button to TopHeader
+  17. Complete AuthModal (close on success, backdrop click)
+  18. Test full auth flow locally
+
+DEPLOYMENT SESSION (30 minutes):
+  19. Push to GitHub
+  20. Deploy backend to Render
+  21. Deploy frontend to Vercel
+  22. Set all env vars on both platforms
+  23. Update CORS after Vercel URL is known
+  24. End-to-end test on live URL
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+SECTION 8 — AGENT PROMPT (15 targeted changes)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Upload to Claude Project:
+  backend/requirements.txt
+  backend/services/rag_memory.py
+  backend/services/groq_service.py
+  backend/core/config.py
+  backend/.env.example
+  backend/render.yaml
+  frontend/src/App.jsx
+  frontend/src/components/dashboard/WhatIfSimulator.jsx
+  frontend/src/lib/api.js
+  frontend/src/store/useCloudStore.js
+  frontend/src/context/CloudIQContext.jsx
+  frontend/src/components/layout/TopHeader.jsx
+  frontend/src/components/auth/AuthModal.jsx
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+[START v9 AGENT PROMPT]
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+You are a senior full-stack engineer applying targeted fixes to CloudIQ v9.
+The project is an AI cloud intelligence SaaS with FastAPI backend and React frontend.
+
+All source files are attached. Read every file completely before starting.
+CRITICAL RULE: After each change, show the COMPLETE updated file.
+Wait for "next" approval before proceeding. Never show partial files.
+Never skip verification steps.
+
+KEY FACTS:
+  Backend: FastAPI + SQLAlchemy + Supabase PostgreSQL + Gemini + Groq + ChromaDB
+  Frontend: React 19 + Vite + Tailwind CSS variables (never hardcode colors)
+  State: Zustand (useCloudStore.js) via CloudIQContext.jsx → useCloudIQ hook
+  Design: CSS variables only — --accent:#00d4ff, --bg-base:#060a14 etc.
+  SSE streaming: /api/chat/stream parses ui_command blocks from AI responses
+  Agent loop: _run_agent_loop() in chat_controller.py → agent_planner/executor/reflector/decider
+  DO NOT DELETE: agent_planner.py, agent_executor.py, agent_reflector.py,
+                 agent_decider.py, gemini_config.py, routers/legacy.py
+
+═══════════════════════════════════════════════════════════════════
+CHANGE 1 — Fix requirements.txt (remove packages that crash Render)
+═══════════════════════════════════════════════════════════════════
+
+FILE: backend/requirements.txt
+
+PROBLEM: These packages will crash Render free tier deployment:
+  - sentence-transformers: downloads 400MB model, exceeds 512MB RAM limit
+  - langchain-ollama: requires local Ollama server, unavailable on cloud
+  - langchain, langchain-community: not imported anywhere in actual code
+  - crewai: not used anywhere in the codebase
+
+ChromaDB uses sentence-transformers by default for embeddings.
+We will fix rag_memory.py in the next change to avoid this.
+
+REWRITE requirements.txt to contain ONLY what is actually used:
+
+fastapi>=0.111.0
+uvicorn[standard]>=0.29.0
+sqlalchemy>=2.0.0
+psycopg2-binary>=2.9.0
+numpy>=1.26.0
+scikit-learn>=1.4.0
+pandas>=2.2.0
+scipy>=1.13.0
+networkx>=3.3
+google-genai
+chromadb>=0.5.0
+python-multipart>=0.0.9
+
+Nothing else. No langchain. No sentence-transformers. No crewai. No flask.
+Show me the complete updated requirements.txt. Await "next".
+
+═══════════════════════════════════════════════════════════════════
+CHANGE 2 — Fix rag_memory.py (prevent 400MB model download on startup)
+═══════════════════════════════════════════════════════════════════
+
+FILE: backend/services/rag_memory.py
+
+PROBLEM: When chromadb.PersistentClient is used with query_texts=[...],
+ChromaDB tries to download sentence-transformers automatically.
+This is 400MB on first startup — crashes Render's 512MB RAM limit.
+
+FIX: Explicitly use ChromaDB's built-in DefaultEmbeddingFunction which
+is a lightweight character-level hash. No downloads. Works on any server.
+
+CHANGE: When calling get_or_create_collection, pass:
+  from chromadb.utils import embedding_functions
+  _default_ef = embedding_functions.DefaultEmbeddingFunction()
+
+  chat_collection = chroma_client.get_or_create_collection(
+      name="chat_history",
+      embedding_function=_default_ef,
+  )
+
+Keep store_interaction() and retrieve_relevant_history() functions
+exactly as they are. Only change the collection initialization.
+Show me the complete updated rag_memory.py. Await "next".
+
+═══════════════════════════════════════════════════════════════════
+CHANGE 3 — Fix WhatIfSimulator.jsx (wrong data path — 4th report)
+═══════════════════════════════════════════════════════════════════
+
+FILE: frontend/src/components/dashboard/WhatIfSimulator.jsx
+
+Read the file. Find lines that read platform.rawSummary?.resources?.idle_count
+and platform.rawSummary?.resources?.total_monthly_cost (or similar with .resources.)
+
+PROBLEM: .resources. nesting does not exist.
+commandCenter.js sets rawSummary = snapshot.analyze
+/api/analyze returns idle_count and total_monthly_cost at the TOP level.
+The || 5 fallback is fake hardcoded data.
+
+CHANGE — remove .resources. from both lines:
+  const idleCount = platform.rawSummary?.idle_count || 0;
+  const totalCost = platform.rawSummary?.total_monthly_cost || 0;
+
+That is the ONLY change. Keep every other line identical.
+Show me the complete updated WhatIfSimulator.jsx. Await "next".
+
+═══════════════════════════════════════════════════════════════════
+CHANGE 4 — Fix App.jsx (page transitions broken — 4th report)
+═══════════════════════════════════════════════════════════════════
+
+FILE: frontend/src/App.jsx
+
+Read the complete file first.
+
+PROBLEM: key={location.pathname} is on <Routes> which is not a motion component.
+AnimatePresence cannot animate it. PageWrapper creates individual motion.divs
+per route but AnimatePresence can't coordinate their enter/exit.
+Result: pages snap instantly despite AnimatePresence being present.
+
+FIX: Complete restructure of AnimatedRoutes function:
+1. DELETE the PageWrapper component entirely
+2. Single motion.div wraps ALL Routes with key={location.pathname}
+3. Routes has NO key prop — only receives location prop
+4. Each route element: ErrorBoundary with routeKey prop (no PageWrapper)
+
+Use these exact variants:
+  const pageVariants = {
+    initial: { opacity: 0, y: 10 },
+    animate: {
+      opacity: 1, y: 0,
+      transition: { duration: 0.22, ease: [0.16, 1, 0.3, 1] }
+    },
+    exit: {
+      opacity: 0, y: -6,
+      transition: { duration: 0.15, ease: 'easeIn' }
+    },
+  };
+
+AnimatedRoutes structure:
+  <AnimatePresence mode="wait">
+    <motion.div key={location.pathname} variants={pageVariants}
+                initial="initial" animate="animate" exit="exit"
+                style={{ minHeight: '100%', width: '100%' }}>
+      <Routes location={location}>
+        {/* all 9 routes + redirects — same paths as current */}
+        {/* each element: <ErrorBoundary routeKey={location.pathname}><PageComponent /></ErrorBoundary> */}
+      </Routes>
+    </motion.div>
+  </AnimatePresence>
+
+Keep all imports unchanged. Keep CloudIQProvider, Router, AppShell, Suspense unchanged.
+Show me the complete updated App.jsx. Await "next".
+
+═══════════════════════════════════════════════════════════════════
+CHANGE 5 — Add VITE_API_URL to api.js (required for production)
+═══════════════════════════════════════════════════════════════════
+
+FILE: frontend/src/lib/api.js
+
+Read the current file completely.
+
+CHECK: Does it already use import.meta.env.VITE_API_URL?
+IF YES: confirm and show the file. No change needed.
+IF NO:
+
+ADD at the top of the file (after any imports):
+  const API_BASE = import.meta.env.VITE_API_URL || '';
+
+FIND the fetchJson function. UPDATE every fetch() URL construction:
+  Change: fetch(path, options)
+  To: fetch(`${API_BASE}${path}`, options)
+
+This enables:
+  Dev: VITE_API_URL is empty → /api/... → vite proxy → localhost:8000
+  Prod: VITE_API_URL=https://cloudiq-backend.onrender.com → full URL used
+
+Keep all other logic (getErrorMessage, error handling) exactly the same.
+Show me the complete updated api.js. Await "next".
+
+═══════════════════════════════════════════════════════════════════
+CHANGE 6 — Add Groq key to .env.example and render.yaml
+═══════════════════════════════════════════════════════════════════
+
+FILE 1: backend/.env.example
+Read current file. ADD at the end:
+  # ── Groq (Free Llama 3 — cloud-native, zero local install needed) ─
+  # Get free key at: https://console.groq.com (no credit card required)
+  GROQ_API_KEY=your_groq_key_here
+  GROQ_MODEL=llama3-8b-8192
+
+FILE 2: backend/render.yaml
+Read current file. ADD to envVars section:
+  - key: GROQ_API_KEY
+    sync: false
+  - key: GROQ_MODEL
+    value: llama3-8b-8192
+
+Show me both complete updated files. Await "next".
+
+═══════════════════════════════════════════════════════════════════
+CHANGE 7 — Wire auth state in useCloudStore.js
+═══════════════════════════════════════════════════════════════════
+
+FILE: frontend/src/store/useCloudStore.js
+
+Read the complete current file first.
+
+ADD to the Zustand store (do not remove any existing state or actions):
+
+1. ADD import at top:
+   import { supabase } from '../lib/supabase';
+
+2. ADD to initial state object:
+   user: null,
+   authLoading: true,
+
+3. ADD these actions:
+   initAuth: async () => {
+     const { data: { session } } = await supabase.auth.getSession();
+     set({ user: session?.user || null, authLoading: false });
+     supabase.auth.onAuthStateChange((_event, session) => {
+       set({ user: session?.user || null });
+     });
+   },
+
+   signOut: async () => {
+     await supabase.auth.signOut();
+     set({ user: null });
+   },
+
+Show me the complete updated useCloudStore.js. Await "next".
+
+═══════════════════════════════════════════════════════════════════
+CHANGE 8 — Call initAuth on app startup in CloudIQContext.jsx
+═══════════════════════════════════════════════════════════════════
+
+FILE: frontend/src/context/CloudIQContext.jsx
+
+Read the complete current file first.
+
+FIND the main useEffect that runs on component mount (the one that calls
+refreshData() or sets up the polling interval).
+
+ADD this line at the TOP of that useEffect (before refreshData):
+  useCloudStore.getState().initAuth();
+
+This initializes auth state from existing Supabase session when app loads.
+It also sets up the onAuthStateChange listener for real-time auth updates.
+
+Keep everything else in CloudIQContext exactly the same.
+Show me the complete updated CloudIQContext.jsx. Await "next".
+
+═══════════════════════════════════════════════════════════════════
+CHANGE 9 — Add login button to TopHeader.jsx
+═══════════════════════════════════════════════════════════════════
+
+FILE: frontend/src/components/layout/TopHeader.jsx
+
+Read the complete current file first.
+
+ADD auth UI to the RIGHT section of the header (after the theme toggle,
+before or after the updated timestamp):
+
+1. ADD imports:
+   import { LogIn, LogOut, User } from 'lucide-react';
+   import { useState } from 'react';
+   import AuthModal from '../auth/AuthModal';
+   import useCloudStore from '../../store/useCloudStore';
+
+2. ADD inside component:
+   const user = useCloudStore(state => state.user);
+   const signOut = useCloudStore(state => state.signOut);
+   const [showAuth, setShowAuth] = useState(false);
+
+3. ADD JSX in right section:
+   IF user is logged in: show username (email before @) + logout icon button
+   IF user is not logged in: show "Sign In" button with LogIn icon
+
+   Logged in display:
+   - 28px avatar circle (bg --accent-soft, border --accent-border, User icon)
+   - email prefix in 11px --text-muted (truncated to 100px)
+   - LogOut icon button (13px, btn-icon style, calls signOut on click)
+
+   Not logged in display:
+   - Button: flex, gap 6px, padding 4px 12px, border-radius 8px
+   - font-size 12px, font-weight 600
+   - background: var(--accent), color: #060a14, no border
+   - LogIn icon (13px) + "Sign In" text
+   - onClick: setShowAuth(true)
+
+4. ADD below the header JSX (inside the component return):
+   {showAuth && <AuthModal onClose={() => setShowAuth(false)} />}
+
+All styles must use CSS variables — no hardcoded colors.
+Show me the complete updated TopHeader.jsx. Await "next".
+
+═══════════════════════════════════════════════════════════════════
+CHANGE 10 — Complete AuthModal.jsx (close on success + backdrop)
+═══════════════════════════════════════════════════════════════════
+
+FILE: frontend/src/components/auth/AuthModal.jsx
+
+Read the complete current file first.
+
+The modal likely has email/password form with supabase sign-in.
+ADD these missing features:
+
+1. Props: { onClose } — receives close handler from parent
+
+2. Auto-close on successful auth:
+   useEffect(() => {
+     const { data: { subscription } } = supabase.auth.onAuthStateChange(
+       (event, session) => {
+         if (session && (event === 'SIGNED_IN' || event === 'USER_UPDATED')) {
+           onClose();
+         }
+       }
+     );
+     return () => subscription.unsubscribe();
+   }, [onClose]);
+
+3. Backdrop overlay:
+   position: fixed, inset: 0
+   background: rgba(0,0,0,0.65)
+   backdropFilter: blur(8px)
+   zIndex: 100
+   display: flex, alignItems: center, justifyContent: center
+   onClick: onClose (clicking backdrop closes modal)
+
+4. Modal box:
+   width: 420px, maxWidth: calc(100vw - 32px)
+   background: var(--bg-mid)
+   border: 1px solid var(--border-active)
+   borderRadius: 16px
+   padding: 28px
+   boxShadow: 0 24px 60px rgba(0,0,0,0.5)
+   onClick: e.stopPropagation() (prevent backdrop close)
+
+5. Close X button:
+   position absolute top-4 right-4 (or top-right of modal)
+   btn-icon style, X icon from lucide-react
+
+6. Toggle between Sign In and Sign Up modes with a link/button
+
+7. Error display: show error.message in red if auth fails
+
+8. Loading state: disable button and show spinner while request is in progress
+
+All styles use CSS variables. No hardcoded colors.
+Show me the complete updated AuthModal.jsx. Await "next".
+
+═══════════════════════════════════════════════════════════════════
+FINAL — Summary, git cleanup, and deployment instructions
+═══════════════════════════════════════════════════════════════════
+
+Provide:
+
+1. Complete list of ALL files changed in this session
+
+2. These exact git commands for cleanup:
+   git rm --cached backend/.env
+   git rm --cached frontend/.env.local
+   git rm -r --cached backend/chroma_db/
+   git rm --cached backend/cloudiq.db
+   git rm -f backend/ai_client_gemini.py
+   git rm -f backend/services/ollama_service.py
+   git add .
+   git commit -m "v9: fix deployment, auth wired, security cleanup, page transitions"
+
+3. Files to add to .gitignore:
+   backend/.gitignore additions:
+     .env
+     *.db
+     chroma_db/
+     __pycache__/
+     *.pyc
+   
+   frontend/.gitignore additions:
+     .env.local
+     .env.production
+     .env.development
+
+4. Step-by-step deployment sequence:
+   a. Reset Supabase DB password → update backend/.env
+   b. Regenerate Gemini key → update backend/.env
+   c. Get Groq key at console.groq.com → update backend/.env
+   d. Run git cleanup commands above
+   e. Push to GitHub
+   f. Deploy backend: Render → New Web Service → connect repo
+      Root: backend, Build: pip install -r requirements.txt
+      Start: uvicorn main:app --host 0.0.0.0 --port $PORT
+      Env vars: GEMINI_API_KEY, GROQ_API_KEY, DATABASE_URL, CORS_ORIGINS
+   g. Deploy frontend: vercel.com → import repo
+      Root: frontend, Framework: Vite
+      Env vars: VITE_API_URL, VITE_SUPABASE_URL, VITE_SUPABASE_ANON_KEY
+   h. Copy Vercel URL → update CORS_ORIGINS on Render → redeploy backend
+   i. Test: open Vercel URL → sign in → type "dark theme" → watch UI change
+
+[END v9 AGENT PROMPT]
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+SECTION 9 — v8 → v9 BEFORE/AFTER
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+ITEM                         v8                         v9
+─────────────────────────────────────────────────────────────────────────
+WhatIfSimulator              Fake hardcoded data        Real idle/cost data
+Page transitions             Broken (key on Routes)     Smooth 220ms fade
+requirements.txt             Crashes Render (500MB+)    Lean, deploys in 3min
+rag_memory.py embedding      Downloads 400MB model      Lightweight built-in
+Supabase DB password         EXPOSED in repo            Untracked + reset
+Gemini API key               EXPOSED (5th time)         Untracked + regenerated
+chroma_db in repo            Binary files committed      .gitignored
+cloudiq.db in repo           Committed                   .gitignored
+Dead files                   ai_client_gemini.py         Deleted
+                             ollama_service.py            Deleted
+Auth state                   Half-built, unwired         Zustand + initAuth
+Login button                 Missing                     TopHeader with toggle
+AuthModal close              No backdrop, no auto-close  Complete
+VITE_API_URL in api.js       Missing                     Added
+Groq key in config           Not in render.yaml          Added to deploy config
+Agent files                  Safe (proposed deletion)    Safe (NOT deleted)
+Deployment                   Would fail                  Ready to deploy
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+END OF CloudIQ v8 → v9 TRANSFORMATION PLAN
+10 targeted changes · Security fixes · Deployment ready · Auth complete
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━

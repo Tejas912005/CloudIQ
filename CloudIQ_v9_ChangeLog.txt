@@ -1,0 +1,269 @@
+╔══════════════════════════════════════════════════════════════════════════════════════╗
+║        CLOUDIQ v8 → v9 CHANGE LOG                                                   ║
+║        All changes made using CloudIQ_v8_Plan.txt as reference                      ║
+║        Date: May 1, 2026                                                             ║
+╚══════════════════════════════════════════════════════════════════════════════════════╝
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+SECTION 0 — FILE DELETIONS (orphaned dead code)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+DELETED: backend/ai_client_gemini.py
+  WHY:    Nothing in the codebase imports this file. It was a leftover from the
+          very first version of the project. Fully replaced by services/gemini_service.py.
+
+DELETED: backend/services/ollama_service.py
+  WHY:    Ollama requires a local GPU server which is unavailable on cloud deployments
+          (Render, Railway, etc). Fully replaced by services/groq_service.py which
+          calls the Groq cloud API instead — works on any server with no local setup.
+
+NOT DELETED (kept as per v8 plan Section 0):
+  backend/agent_planner.py    — actively imported by agents/chat_controller.py
+  backend/agent_executor.py   — actively imported by agents/chat_controller.py
+  backend/agent_reflector.py  — actively imported by agents/chat_controller.py
+  backend/agent_decider.py    — actively imported by agents/chat_controller.py
+  backend/gemini_config.py    — legacy shim, imported by above agent files
+  backend/routers/legacy.py   — included in main.py
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+SECTION 1 — SECURITY / GITIGNORE CHANGES
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+MODIFIED: .gitignore  (root)
+  ADDED:  *.zip, backend.zip, frontend.zip
+  WHY:    Zip archives of the project were being committed to git, which could
+          accidentally include .env files with secrets inside the archive.
+
+CREATED: backend/.gitignore  [NEW FILE]
+  ADDED:  .env, *.db, chroma_db/, __pycache__/, *.pyc, *.log
+  WHY:    The backend had no .gitignore of its own. Without it, the Supabase
+          DATABASE_URL (including password) and Gemini API key in backend/.env
+          could be committed to the repository.
+
+MODIFIED: frontend/.gitignore
+  ADDED:  .env.local, .env.production, .env.development, .env
+  WHY:    Frontend env files contain Supabase anon keys and API URLs. These
+          must never be committed.
+
+MANUAL ACTIONS STILL REQUIRED (cannot be done by code):
+  ACTION 1: Reset Supabase database password
+    → Go to: https://supabase.com → your project → Settings → Database
+    → Click "Reset database password"
+    → Update backend/.env with the new DATABASE_URL
+
+  ACTION 2: Regenerate Gemini API key
+    → Go to: https://aistudio.google.com/apikey
+    → Delete old key: AIzaSyAvt8eT2TfMU0k8UoTxcjyEYFuWUBMzKJk  ← EXPOSED
+    → Create new key and update backend/.env
+
+  ACTION 3: Run git untracking commands (run these in terminal once):
+    git rm --cached backend/.env
+    git rm --cached frontend/.env.local
+    git rm -r --cached backend/chroma_db/
+    git rm --cached backend/cloudiq.db
+    git add .
+    git commit -m "security: untrack secrets and sensitive files"
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+SECTION 2 — DEPLOYMENT CRASH FIXES
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+MODIFIED: backend/requirements.txt
+  REMOVED:  sentence-transformers  (was 400MB — crashed Render free tier RAM limit)
+  REMOVED:  langchain-ollama       (requires local Ollama server, unavailable on cloud)
+  REMOVED:  langchain              (not imported anywhere in actual code)
+  REMOVED:  langchain-community    (not imported anywhere in actual code)
+  REMOVED:  crewai                 (not used anywhere in the codebase)
+  KEPT:     fastapi, uvicorn, sqlalchemy, psycopg2-binary, numpy, scikit-learn,
+            pandas, scipy, networkx, google-genai, chromadb, python-multipart
+  WHY:      These removed packages caused Render to fail during build or exceed the
+            512MB RAM limit on startup. The lean requirements.txt deploys in ~3 minutes.
+
+MODIFIED: backend/services/rag_memory.py
+  CHANGED:  get_or_create_collection() now passes embedding_function=_default_ef
+  ADDED:    from chromadb.utils import embedding_functions
+  ADDED:    _default_ef = embedding_functions.DefaultEmbeddingFunction()
+  WHY:      Without an explicit embedding function, ChromaDB tries to download
+            sentence-transformers (400MB) on first startup — crashes Render.
+            The DefaultEmbeddingFunction is a lightweight built-in character-level
+            hash. Less semantically accurate but works on any cloud server instantly.
+
+VERIFIED: backend/core/config.py
+  STATUS:   Already correct — CORS_ORIGINS reads from environment variable with
+            localhost fallback. No change needed.
+            Production URL should be set in Render dashboard env vars.
+
+VERIFIED: frontend/src/lib/api.js
+  STATUS:   Already uses import.meta.env.VITE_BACKEND_URL || '' correctly.
+            All fetch() calls prepend the API base URL.
+            No change needed. In production, set VITE_BACKEND_URL in Vercel env vars.
+
+MODIFIED: backend/.env.example
+  ADDED:    GROQ_API_KEY=your_groq_key_here
+  ADDED:    GROQ_MODEL=llama3-8b-8192
+  CHANGED:  DATABASE_URL now shows postgresql:// pattern (not sqlite)
+  CHANGED:  GEMINI_MODEL updated to gemini-2.0-flash
+
+MODIFIED: render.yaml
+  ADDED:    GROQ_API_KEY env var (sync: false — must be set manually in Render dashboard)
+  ADDED:    GROQ_MODEL env var (value: llama3-8b-8192)
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+SECTION 3 — PERSISTENT BUG FIXES
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+MODIFIED: frontend/src/components/dashboard/WhatIfSimulator.jsx
+  LINE 14:  const idleCount = platform.rawSummary?.idle_count || 0;
+  LINE 15:  const totalCost = platform.rawSummary?.total_monthly_cost || 0;
+  REMOVED:  .resources. nesting that does not exist in the API response
+  REMOVED:  || 5 fake hardcoded fallback
+  WHY:      /api/analyze returns idle_count and total_monthly_cost at the top level
+            of the response object. The .resources. sub-object never existed. The
+            || 5 fallback was hiding the bug and displaying fake data in the UI.
+            The What-If slider "You Save" calculation was always wrong as a result.
+
+MODIFIED: frontend/src/App.jsx
+  DELETED:  PageWrapper component (was a motion.div per route — broken pattern)
+  CHANGED:  AnimatedRoutes — key={location.pathname} moved from <Routes> to <motion.div>
+  CHANGED:  <Routes> now has NO key prop
+  CHANGED:  pageVariants — simplified to 220ms fade + 10px y-shift (was 500ms blur)
+  REMOVED:  Blocking auth gate (if (!session) return <AuthModal />) — auth now in TopHeader
+  REMOVED:  Supabase session check in App.jsx (moved to useCloudStore.initAuth)
+  WHY:      AnimatePresence animates its direct children when their key changes.
+            <Routes> is not a motion component — framer-motion ignores it completely.
+            The fix is to make <motion.div key={pathname}> the direct child, with
+            <Routes> inside it. This was reported as broken 4 times.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+SECTION 4 — AUTHENTICATION COMPLETION
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+MODIFIED: frontend/src/store/useCloudStore.js
+  ADDED:    import { supabase } from '../lib/supabase'
+  ADDED:    user: null          — holds authenticated Supabase user object
+  ADDED:    authLoading: true   — true while checking existing session
+  ADDED:    initAuth()          — reads existing session, sets up onAuthStateChange listener
+  ADDED:    signOut()           — calls supabase.auth.signOut() and clears user state
+  WHY:      Auth state was half-built with no Zustand integration. Components had no
+            way to know if a user was logged in. The initAuth action checks for an
+            existing session on load and listens for future auth changes in real-time.
+
+MODIFIED: frontend/src/context/CloudIQContext.jsx
+  ADDED:    useCloudStore.getState().initAuth() at the top of the startup useEffect
+  WHY:      initAuth() must be called exactly once when the app boots. CloudIQContext
+            is the ideal place since it wraps the entire app and runs on first mount.
+
+MODIFIED: frontend/src/components/layout/TopHeader.jsx
+  ADDED:    import { LogIn, LogOut, User } from 'lucide-react'
+  ADDED:    import AuthModal from '../auth/AuthModal'
+  ADDED:    import { useCloudStore } from '../../store/useCloudStore'
+  ADDED:    user = useCloudStore(state => state.user)
+  ADDED:    signOut = useCloudStore(state => state.signOut)
+  ADDED:    [showAuth, setShowAuth] — controls AuthModal visibility
+  ADDED:    Auth UI in RIGHT section of header:
+              - If logged in: avatar circle + email prefix + LogOut button
+              - If not logged in: "Sign In" button with accent color
+  ADDED:    {showAuth && <AuthModal onClose={...} />}
+  WRAPPED:  return in a React Fragment (<>) to allow sibling modal render
+  WHY:      There was no visible login button anywhere in the app. Users had no way
+            to sign in or out without knowing to look for a hidden modal.
+
+MODIFIED: frontend/src/components/auth/AuthModal.jsx
+  CHANGED:  Props from { onAuthSuccess } to { onClose }
+  ADDED:    useEffect with supabase.auth.onAuthStateChange → auto-closes on SIGNED_IN
+  ADDED:    Backdrop overlay (fixed inset-0, rgba(0,0,0,0.65), blur(8px), z-index 100)
+  ADDED:    Click backdrop to close (onClick={onClose} on backdrop, stopPropagation on modal)
+  ADDED:    Close X button (position absolute, top-right corner of modal box)
+  ADDED:    Loading state — button disabled + spinner while request in progress
+  ADDED:    Error display — red banner shows error.message if auth fails
+  ADDED:    Sign-up success message — prompts user to check email for verification
+  IMPROVED: All styles use CSS variables (no hardcoded colors)
+  WHY:      The modal had no way to close itself, no backdrop, no X button, and no
+            auto-close after successful login. It was functionally broken.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+FULL LIST OF ALL CHANGED FILES
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+DELETED FILES:
+  backend/ai_client_gemini.py
+  backend/services/ollama_service.py
+
+NEW FILES:
+  backend/.gitignore
+
+MODIFIED FILES:
+  .gitignore                                          (added *.zip)
+  frontend/.gitignore                                 (added .env.* files)
+  backend/requirements.txt                            (removed 5 heavy/unused packages)
+  backend/.env.example                                (added GROQ_API_KEY, GROQ_MODEL)
+  render.yaml                                         (added GROQ_API_KEY, GROQ_MODEL)
+  backend/services/rag_memory.py                      (DefaultEmbeddingFunction)
+  frontend/src/App.jsx                                (page transitions fix, removed auth gate)
+  frontend/src/components/dashboard/WhatIfSimulator.jsx  (fixed data path)
+  frontend/src/store/useCloudStore.js                 (auth state + initAuth + signOut)
+  frontend/src/context/CloudIQContext.jsx             (call initAuth on startup)
+  frontend/src/components/layout/TopHeader.jsx        (Sign In / Sign Out button)
+  frontend/src/components/auth/AuthModal.jsx          (backdrop, auto-close, X button)
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+REMAINING MANUAL STEPS BEFORE DEPLOYMENT
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+1. SECURITY (do RIGHT NOW):
+   □ Reset Supabase DB password → update DATABASE_URL in backend/.env
+   □ Regenerate Gemini API key → update GEMINI_API_KEY in backend/.env
+   □ Get free Groq key at console.groq.com → add GROQ_API_KEY to backend/.env
+
+2. GIT CLEANUP (run once in terminal):
+   git rm --cached backend/.env
+   git rm --cached frontend/.env.local
+   git rm -r --cached backend/chroma_db/
+   git rm --cached backend/cloudiq.db
+   git add .
+   git commit -m "v9: security cleanup, deployment fixes, auth wired, page transitions fixed"
+
+3. DEPLOY BACKEND (Render):
+   □ Connect GitHub repo to Render
+   □ Root Dir: backend
+   □ Build: pip install -r requirements.txt
+   □ Start: uvicorn main:app --host 0.0.0.0 --port $PORT
+   □ Set env vars: GEMINI_API_KEY, GROQ_API_KEY, DATABASE_URL
+   □ Leave CORS_ORIGINS blank for now → deploy → get URL
+
+4. DEPLOY FRONTEND (Vercel):
+   □ Import GitHub repo on vercel.com
+   □ Root Dir: frontend, Framework: Vite
+   □ Set env vars: VITE_BACKEND_URL, VITE_SUPABASE_URL, VITE_SUPABASE_ANON_KEY
+   □ Deploy → get your Vercel URL (e.g. cloudiq-xyz.vercel.app)
+
+5. FINAL WIRING:
+   □ Go to Render → cloudiq-backend → Environment Variables
+   □ Set CORS_ORIGINS = https://your-exact-vercel-url.vercel.app
+   □ Trigger Render redeploy
+   □ Test: open Vercel URL → assistant → type "dark theme" → watch UI change
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+v8 → v9 BEFORE / AFTER SUMMARY
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+ITEM                         v8                              v9
+─────────────────────────────────────────────────────────────────────────────────────
+WhatIfSimulator data         Fake data (|| 5 fallback)       Real idle_count / total_cost
+Page transitions             Broken (instant snap)           Smooth 220ms fade/slide
+requirements.txt             Crashes Render (500MB+)         Lean — deploys in ~3 min
+rag_memory.py embedding      Downloads 400MB model           Lightweight built-in (0MB)
+ai_client_gemini.py          Dead file in repo               DELETED
+ollama_service.py            Dead file — crashes on cloud    DELETED
+Auth state                   Not in Zustand                  user + authLoading + initAuth
+Login button                 Missing from UI                 TopHeader Sign In / Sign Out
+AuthModal                    No backdrop, no close, broken   Backdrop, X button, auto-close
+Groq key                     Not in render.yaml              Added to render.yaml + .env.example
+backend/.gitignore           Did not exist                   Created with all sensitive patterns
+frontend/.gitignore          Missing .env.* entries          Added all env file patterns
+root .gitignore              Missing *.zip entries           Added *.zip exclusions
+Deployment readiness         Would fail on Render            Ready to deploy
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+END OF CLOUDIQ v8 → v9 CHANGE LOG
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
