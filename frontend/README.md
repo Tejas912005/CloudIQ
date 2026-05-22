@@ -1,4 +1,4 @@
-# CloudIQ Frontend
+## CloudIQ Frontend
 
 CloudIQ is a React + Vite dashboard for exploring simulated cloud infrastructure data from the Python backend.
 
