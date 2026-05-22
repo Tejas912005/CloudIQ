@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Bot, SendHorizonal, User, ShieldAlert, CheckCircle2, Loader2 } from 'lucide-react';
+import { Bot, SendHorizonal, User, ShieldAlert, CheckCircle2, Loader2, Trash2 } from 'lucide-react';
 import { getErrorMessage } from '../lib/api';
 import {
   detectLanguageTone,
@@ -125,6 +125,25 @@ export default function Assistant() {
   const [phaseIndex, setPhaseIndex] = useState(0);
   const bottomRef = useRef(null);
 
+  const handleClearHistory = async () => {
+    if (typeof window !== 'undefined') {
+      window.localStorage.removeItem(CHAT_STORAGE_KEY);
+      window.localStorage.removeItem('cloudiq-ui-overrides');
+      const root = document.documentElement;
+      root.style.cssText = "";
+      root.classList.add('dark');
+      root.setAttribute('data-theme', 'dark');
+      document.body.style.fontFamily = "";
+    }
+    setMessages([{ id: 'seed', role: 'assistant', text: copy.assistantGreeting, tools: [] }]);
+    try {
+      const API_BASE = import.meta.env.VITE_BACKEND_URL || '';
+      await fetch(`${API_BASE}/api/chat/clear`, { method: 'POST' });
+    } catch (err) {
+      console.error('Failed to clear database chat history:', err);
+    }
+  };
+
   useEffect(() => {
     if (typeof window !== 'undefined') {
       window.localStorage.setItem(CHAT_STORAGE_KEY, JSON.stringify(messages));
@@ -213,10 +232,12 @@ export default function Assistant() {
                const root = document.documentElement;
                if (payload.target === 'dark') {
                   root.classList.add('dark');
+                  root.setAttribute('data-theme', 'dark');
                   root.style.setProperty('--bg-base', '#0a0a0f');
                   root.style.setProperty('--surface', '#111116');
                } else {
                   root.classList.remove('dark');
+                  root.setAttribute('data-theme', 'light');
                   root.style.setProperty('--bg-base', '#f8fafc');
                   root.style.setProperty('--surface', '#ffffff');
                }
@@ -229,8 +250,13 @@ export default function Assistant() {
                 const root = document.documentElement;
                 Object.entries(cmd.vars).forEach(([key, value]) => {
                   if (key === '--theme') {
-                    if (value === 'dark') root.classList.add('dark');
-                    else root.classList.remove('dark');
+                    if (value === 'dark') {
+                      root.classList.add('dark');
+                      root.setAttribute('data-theme', 'dark');
+                    } else {
+                      root.classList.remove('dark');
+                      root.setAttribute('data-theme', 'light');
+                    }
                   } else if (key === '--font-size-base') {
                     root.style.fontSize = value;
                   } else if (key === '--font-family') {
@@ -239,6 +265,28 @@ export default function Assistant() {
                     root.style.setProperty(key, value);
                   }
                 });
+                // Auto-derive accent-soft, accent-border, accent-glow from --accent
+                // if --accent was provided but the derived ones were not
+                if (cmd.vars['--accent'] && !cmd.vars['--accent-soft']) {
+                  const hex = cmd.vars['--accent'];
+                  // Parse hex to rgb
+                  const r = parseInt(hex.slice(1,3), 16);
+                  const g = parseInt(hex.slice(3,5), 16);
+                  const b = parseInt(hex.slice(5,7), 16);
+                  if (!isNaN(r)) {
+                    root.style.setProperty('--accent-soft', `rgba(${r},${g},${b},0.10)`);
+                    root.style.setProperty('--accent-border', `rgba(${r},${g},${b},0.25)`);
+                    root.style.setProperty('--accent-glow', `rgba(${r},${g},${b},0.20)`);
+                    root.style.setProperty('--border-active', `rgba(${r},${g},${b},0.35)`);
+                    root.style.setProperty('--border-focus', `rgba(${r},${g},${b},0.5)`);
+                    // Also persist these derived values
+                    cmd.vars['--accent-soft'] = `rgba(${r},${g},${b},0.10)`;
+                    cmd.vars['--accent-border'] = `rgba(${r},${g},${b},0.25)`;
+                    cmd.vars['--accent-glow'] = `rgba(${r},${g},${b},0.20)`;
+                    cmd.vars['--border-active'] = `rgba(${r},${g},${b},0.35)`;
+                    cmd.vars['--border-focus'] = `rgba(${r},${g},${b},0.5)`;
+                  }
+                }
                 // Persist to localStorage so changes survive refresh
                 try {
                   const stored = JSON.parse(localStorage.getItem('cloudiq-ui-overrides') || '{}');
@@ -307,7 +355,19 @@ export default function Assistant() {
           style={{ borderColor: 'var(--border)' }}
         >
           <h2 className="font-display text-base font-medium" style={{ color: 'var(--text-base)' }}>Assistant</h2>
-          <StatusChip label={language.toUpperCase()} tone="slate" />
+          <div className="flex items-center gap-3">
+            <button
+              onClick={handleClearHistory}
+              className="flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-xs font-medium cursor-pointer transition-all duration-300"
+              style={{ borderColor: 'var(--border)', color: 'var(--text-muted)', background: 'transparent' }}
+              onMouseEnter={(e) => { e.currentTarget.style.borderColor = 'var(--accent-border)'; e.currentTarget.style.color = 'var(--text-base)'; }}
+              onMouseLeave={(e) => { e.currentTarget.style.borderColor = 'var(--border)'; e.currentTarget.style.color = 'var(--text-muted)'; }}
+            >
+              <Trash2 className="h-3.5 w-3.5" style={{ color: 'inherit' }} />
+              Clear Chat
+            </button>
+            <StatusChip label={language.toUpperCase()} tone="slate" />
+          </div>
         </div>
 
         {/* Messages */}
@@ -360,7 +420,7 @@ export default function Assistant() {
           ))}
 
           {/* Typing indicator */}
-          {sending && (
+          {sending && messages.length > 0 && messages[messages.length - 1]?.role === 'assistant' && !messages[messages.length - 1]?.text && (
             <div className="flex gap-3">
               <div
                 className="mt-1 flex h-8 w-8 items-center justify-center rounded-lg border"

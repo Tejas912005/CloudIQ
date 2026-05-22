@@ -155,7 +155,7 @@
   }
   .btn-primary:hover {
     transform: translateY(-1px);
-    box-shadow: 0 0 32px var(--accent-glow), 0 4px 12px rgba(0,212,255,0.3);
+    box-shadow: 0 0 32px var(--accent-glow), 0 4px 12px var(--accent-glow);
   }
   .btn-primary:active { transform: translateY(0); }
 
@@ -217,7 +217,7 @@
     bottom: 0;
     left: -100%;
     width: 30%;
-    background: linear-gradient(90deg, transparent, rgba(0, 212, 255, 0.2), transparent);
+    background: linear-gradient(90deg, transparent, var(--accent-glow), transparent);
     animation: scan-line 2.5s linear infinite;
   }
 }

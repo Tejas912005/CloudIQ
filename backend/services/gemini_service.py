@@ -22,18 +22,8 @@ from core.config import settings
 
 logger = logging.getLogger("cloudiq.gemini_service")
 
-# ─── System instruction for the cloud AI agent ────────────────────────────────
-SYSTEM_INSTRUCTION = (
-    "You are CloudIQ — an autonomous cloud intelligence AI agent. "
-    "You analyze cloud infrastructure data and provide structured, actionable responses. "
-    "You respond like a senior cloud architect with deep expertise in AWS, GCP, and Azure. "
-    "When given system data, always structure your response with: "
-    "1. Summary 2. Key Findings 3. Recommendations (High/Medium/Low priority) 4. Estimated Impact. "
-    "Be concise, precise, and data-driven. "
-    "If the user says 'simple' or 'explain', provide beginner-friendly analogies. "
-    "If they ask 'what if' or 'simulate', calculate theoretical savings or cascading impacts. "
-    "Always respond in the same language as the user."
-)
+from core.prompts import CLOUDIQ_SYSTEM_PROMPT
+SYSTEM_INSTRUCTION = CLOUDIQ_SYSTEM_PROMPT
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -54,38 +44,17 @@ def _initialize_client():
     try:
         from google import genai
         from google.genai import types
-
-        client = genai.Client(api_key=settings.GEMINI_API_KEY)
-
-        # ── Verification ping ────────────────────────────────────────────────
-        logger.info(f"[GEMINI] Verifying API key with model: {settings.GEMINI_MODEL}...")
-        response = client.models.generate_content(
-            model=settings.GEMINI_MODEL,
-            contents="Reply with exactly: CLOUDIQ_READY",
-            config=types.GenerateContentConfig(
-                system_instruction=SYSTEM_INSTRUCTION,
-                max_output_tokens=20,
-                temperature=0.0,
-            ),
+        client = genai.Client(
+            api_key=settings.GEMINI_API_KEY,
+            http_options=types.HttpOptions(
+                client_args={'timeout': 10.0},
+                async_client_args={'timeout': 10.0}
+            )
         )
-
-        if response and response.text:
-            logger.info(f"[GEMINI] ✅ Live API verified. Response: {response.text.strip()[:60]}")
-            return client
-        else:
-            logger.error("[GEMINI] ❌ API ping returned empty response.")
-            return None
-
+        logger.info(f"[GEMINI] ✅ Client initialized for model: {settings.GEMINI_MODEL} (timeout: 10s)")
+        return client
     except Exception as e:
-        err_str = str(e).lower()
-        if "api_key" in err_str or "api key" in err_str or "permission" in err_str or "403" in err_str:
-            logger.error(f"[GEMINI] ❌ Authentication failed: {e}")
-        elif "quota" in err_str or "rate" in err_str or "limit" in err_str or "429" in err_str:
-            logger.error(f"[GEMINI] ⚠️  Quota/rate limit hit: {e}")
-        elif "network" in err_str or "connection" in err_str or "timeout" in err_str:
-            logger.error(f"[GEMINI] ⚠️  Network error: {e}")
-        else:
-            logger.error(f"[GEMINI] ❌ Unexpected error during initialization: {e}")
+        logger.error(f"[GEMINI] ❌ Failed to initialize client: {e}")
         return None
 
 

@@ -63,7 +63,7 @@ export default function SidebarNav() {
                   }`
                 }
                 style={({ isActive }) => isActive ? {
-                  background: 'rgba(0,212,255,0.08)',
+                  background: 'var(--accent-soft)',
                   borderLeft: '2px solid var(--accent)',
                   paddingLeft: 'calc(12px - 2px)',
                   paddingTop: '10px',

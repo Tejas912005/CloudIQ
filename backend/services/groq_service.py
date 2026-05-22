@@ -23,7 +23,7 @@ from core.prompts import CLOUDIQ_SYSTEM_PROMPT
 logger = logging.getLogger("cloudiq.groq_service")
 
 GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions"
-GROQ_MODEL = "llama3-8b-8192"   # Free tier — Llama 3 8B via Groq
+GROQ_MODEL = settings.GROQ_MODEL if settings.GROQ_MODEL else "llama-3.3-70b-versatile"
 
 
 def _build_context_prompt(context_data: Optional[dict]) -> str:
@@ -55,6 +55,8 @@ def stream_response(
     message: str,
     history: list,
     context_data: Optional[dict] = None,
+    system_prompt: Optional[str] = None,
+    rag_history: Optional[str] = None,
 ) -> Iterator[str]:
     """
     Stream response from Groq's Llama 3 model chunk by chunk.
@@ -66,9 +68,21 @@ def stream_response(
         return
 
     context_prompt = _build_context_prompt(context_data)
+    rag_prompt = ""
+    if rag_history:
+        rag_prompt = (
+            f"\n\n=== HISTORICAL REFERENCE ONLY ===\n"
+            f"The following are relevant snippets from past conversations or previous sessions. "
+            f"Use them ONLY if the user is asking about past decisions, previous calculations, "
+            f"or context from earlier conversations. Otherwise, IGNORE this historical reference "
+            f"and focus 100% on answering the user's current request.\n"
+            f"{rag_history.strip()}\n"
+            f"=== END HISTORICAL REFERENCE ==="
+        )
 
     # Build structured message array
-    messages = [{"role": "system", "content": CLOUDIQ_SYSTEM_PROMPT}]
+    active_prompt = system_prompt if system_prompt else CLOUDIQ_SYSTEM_PROMPT
+    messages = [{"role": "system", "content": active_prompt}]
 
     # Inject the last 10 conversation turns
     for h in history[-10:]:
@@ -79,7 +93,7 @@ def stream_response(
             messages.append({"role": role, "content": text})
 
     # Append context to the current user message
-    full_message = message + context_prompt
+    full_message = message + context_prompt + rag_prompt
     messages.append({"role": "user", "content": full_message})
 
     payload = {
@@ -97,6 +111,7 @@ def stream_response(
         headers={
             "Content-Type": "application/json",
             "Authorization": f"Bearer {settings.GROQ_API_KEY}",
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
         },
     )
 

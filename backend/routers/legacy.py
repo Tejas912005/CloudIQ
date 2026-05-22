@@ -13,6 +13,7 @@ from core.database import get_db
 from models.models import CloudResource, CostHistory, Recommendation
 from services.anomaly_service import detect_cost_anomalies
 from services.prediction_service import get_full_prediction_report
+from services.recommendation_service import generate_recommendations
 
 router = APIRouter(prefix="/api", tags=["Legacy (Backward Compat)"])
 
@@ -57,7 +58,7 @@ def resources(db: Session = Depends(get_db)):
             "id": r.id, "name": r.name, "type": r.resource_type,
             "region": r.region, "cpu_usage": r.cpu_usage,
             "memory_usage": r.memory_usage, "uptime_hours": r.uptime_hours,
-            "hourly_cost": r.hourly_cost, "status": r.status,
+            "hourly_cost": r.hourly_cost, "monthly_cost": r.monthly_cost, "status": r.status,
             "efficiency_score": r.efficiency_score,
             "latency_ms": r.latency_ms, "error_rate": r.error_rate,
             "risk_score": r.risk_score, "sensitivity": r.sensitivity,

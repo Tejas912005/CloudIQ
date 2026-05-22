@@ -36,6 +36,49 @@ def _resolve_intent(message: str) -> str:
     return intent
 
 
+def extract_json_commands(text: str) -> list:
+    """Finds all valid JSON objects containing an 'action' key in the text with balanced braces."""
+    results = []
+    n = len(text)
+    i = 0
+    while i < n:
+        if text[i] == '{':
+            brace_count = 0
+            in_string = False
+            escape = False
+            j = i
+            while j < n:
+                char = text[j]
+                if in_string:
+                    if escape:
+                        escape = False
+                    elif char == '\\':
+                        escape = True
+                    elif char == '"':
+                        in_string = False
+                else:
+                    if char == '"':
+                        in_string = True
+                    elif char == '{':
+                        brace_count += 1
+                    elif char == '}':
+                        brace_count -= 1
+                        if brace_count == 0:
+                            block = text[i:j+1]
+                            try:
+                                parsed = json.loads(block)
+                                if isinstance(parsed, dict) and "action" in parsed:
+                                    results.append((block, parsed))
+                                    i = j
+                                    break
+                            except Exception:
+                                pass
+                j += 1
+        i += 1
+    return results
+
+
+
 @router.post("/chat", response_model=ChatResponse)
 def chat_endpoint(req: ChatRequest, db: Session = Depends(get_db)):
     """
@@ -96,7 +139,7 @@ def chat_stream_endpoint(req: ChatRequest, db: Session = Depends(get_db)):
         else:
             context_data = _get_context_data(intent, db)
             
-        history = _load_history(db)
+        history = _load_history(db, intent=intent)
         chunks = []
 
         yield event({"type": "thinking", "intent": intent})
@@ -129,36 +172,98 @@ def chat_stream_endpoint(req: ChatRequest, db: Session = Depends(get_db)):
 
         import re as _re
 
+        def parse_stream_buffer(buf: str, is_final: bool = False):
+            actions = []
+            while True:
+                json_blocks = extract_json_commands(buf)
+                if not json_blocks:
+                    break
+                block_str, parsed_dict = json_blocks[0]
+                start_idx = buf.find(block_str)
+                if start_idx == -1:
+                    break
+                end_idx = start_idx + len(block_str)
+                
+                prefix = buf[:start_idx]
+                suffix = buf[end_idx:]
+                
+                prefix_match = _re.search(r"```ui_command\s*$", prefix)
+                suffix_match = _re.match(r"^\s*```", suffix)
+                
+                if prefix_match and not suffix_match and not is_final:
+                    break
+                    
+                del_start = start_idx
+                del_end = end_idx
+                
+                if prefix_match:
+                    del_start = prefix_match.start()
+                if suffix_match:
+                    del_end = end_idx + suffix_match.end()
+                    
+                actions.append(parsed_dict)
+                buf = buf[:del_start] + buf[del_end:]
+            return buf, actions
+
         full_buffer = ""
-        for chunk in stream_routed_response(message, history, context_data):
-            chunks.append(chunk)
-            full_buffer += chunk
+        stream_buffer = ""
+        try:
+            for chunk in stream_routed_response(message, history, context_data, intent=intent):
+                stream_buffer += chunk
+                
+                # Parse completed blocks from the stream_buffer
+                stream_buffer, actions = parse_stream_buffer(stream_buffer, is_final=False)
+                for action in actions:
+                    yield event({"type": "action", "command": "ui_control", "payload": action})
+                    
+                # Decide what to yield as tokens
+                idx_backtick = stream_buffer.find('`')
+                idx_brace = stream_buffer.find('{')
+                
+                earliest = -1
+                if idx_backtick != -1 and idx_brace != -1:
+                    earliest = min(idx_backtick, idx_brace)
+                elif idx_backtick != -1:
+                    earliest = idx_backtick
+                elif idx_brace != -1:
+                    earliest = idx_brace
+                    
+                if earliest == -1:
+                    if stream_buffer:
+                        yield event({"type": "token", "text": stream_buffer})
+                        full_buffer += stream_buffer
+                        stream_buffer = ""
+                else:
+                    to_yield = stream_buffer[:earliest]
+                    if to_yield:
+                        yield event({"type": "token", "text": to_yield})
+                        full_buffer += to_yield
+                        stream_buffer = stream_buffer[earliest:]
+                        
+                    if len(stream_buffer) > 1500:
+                        flush_chunk = stream_buffer[:1000]
+                        stream_buffer = stream_buffer[1000:]
+                        yield event({"type": "token", "text": flush_chunk})
+                        full_buffer += flush_chunk
 
-            # ── Universal Agentic UI Control Parser ──────────────────────────
-            # Detects ```ui_command ... ``` blocks emitted by Gemini and strips
-            # them from the visible text, streaming them as action events instead.
-            ui_cmd_pattern = r"```ui_command\s*(\{.*?\})\s*```"
-            ui_matches = _re.findall(ui_cmd_pattern, full_buffer, _re.DOTALL)
-            if ui_matches:
-                for raw_json in ui_matches:
-                    try:
-                        cmd = json.loads(raw_json)
-                        yield event({"type": "action", "command": "ui_control", "payload": cmd})
-                    except json.JSONDecodeError:
-                        pass
-                # Strip ui_command blocks from the visible text
-                visible_text = _re.sub(ui_cmd_pattern, "", full_buffer, flags=_re.DOTALL).strip()
-                full_buffer = visible_text
-                # Re-stream stripped visible text
-                continue
-            # ─────────────────────────────────────────────────────────────────
+        except Exception as stream_err:
+            logger.error(f"[CHAT/STREAM] AI stream failed, using local fallback: {stream_err}")
+            from local_fallback import generate_local_response, infer_intent_from_keywords
+            fallback_intent = infer_intent_from_keywords(message)
+            fallback_text = generate_local_response(message, fallback_intent, context_data)
+            full_buffer = fallback_text
+            yield event({"type": "token", "text": fallback_text})
 
-            yield event({"type": "token", "text": chunk})
+        # Final flush
+        if stream_buffer:
+            stream_buffer, final_actions = parse_stream_buffer(stream_buffer, is_final=True)
+            for action in final_actions:
+                yield event({"type": "action", "command": "ui_control", "payload": action})
+            if stream_buffer:
+                yield event({"type": "token", "text": stream_buffer})
+                full_buffer += stream_buffer
 
-        # Final strip in case block spans multiple chunks
-        import re as _re2
-        ui_cmd_pattern = r"```ui_command\s*(\{.*?\})\s*```"
-        response_text = _re2.sub(ui_cmd_pattern, "", "".join(chunks), flags=_re2.DOTALL).strip()
+        response_text = full_buffer.strip()
 
         db.add(ChatLog(role="user", message=message, intent=intent, mode="gemini"))
         db.add(ChatLog(role="model", message=response_text, intent=intent, mode="gemini"))
@@ -168,6 +273,7 @@ def chat_stream_endpoint(req: ChatRequest, db: Session = Depends(get_db)):
             db.rollback()
 
         yield event({"type": "done", "intent": intent})
+
 
 
     return StreamingResponse(
@@ -196,3 +302,22 @@ def execute_agent_action(action: AgentAction, db: Session = Depends(get_db)):
             db.rollback()
             return {"status": "error", "message": str(e)}
     return {"status": "error", "message": "Unknown action ID"}
+
+
+@router.post("/chat/clear")
+def clear_chat_endpoint(db: Session = Depends(get_db)):
+    """Clear all chat logs from database for a fresh session."""
+    try:
+        db.query(ChatLog).delete()
+        db.commit()
+        try:
+            from services.rag_memory import clear_memory
+            clear_memory()
+        except Exception as rag_err:
+            logger.error(f"[CHAT/CLEAR] Failed to clear RAG memory: {rag_err}")
+        return {"status": "success", "message": "Chat history cleared successfully"}
+    except Exception as e:
+        db.rollback()
+        logger.error(f"[CHAT/CLEAR] Failed to clear history: {e}")
+        return {"status": "error", "message": str(e)}
+

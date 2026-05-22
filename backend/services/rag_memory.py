@@ -74,3 +74,22 @@ def retrieve_relevant_history(query: str, n_results: int = 3) -> list:
     except Exception as e:
         logger.error(f"[RAG] Failed to retrieve history: {e}")
         return []
+
+
+def clear_memory():
+    """Clear all stored interactions in the RAG memory."""
+    global chat_collection
+    if chat_collection is None:
+        return
+    try:
+        try:
+            chroma_client.delete_collection(name="chat_history")
+        except Exception:
+            pass
+        chat_collection = chroma_client.get_or_create_collection(
+            name="chat_history",
+            embedding_function=_default_ef,
+        )
+        logger.info("[RAG] Cleared ChromaDB chat history successfully")
+    except Exception as e:
+        logger.error(f"[RAG] Failed to clear ChromaDB chat history: {e}")

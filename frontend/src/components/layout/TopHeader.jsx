@@ -28,7 +28,7 @@ export default function TopHeader() {
 
   const totalResources = platform?.rawSummary?.total_resources || 0;
   const totalCost      = platform?.rawSummary?.total_monthly_cost || 0;
-  const geminiActive   = platform?.health?.gemini_available !== false;
+  const geminiActive   = platform?.health?.gemini_active !== false;
 
   return (
     <>

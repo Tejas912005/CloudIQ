@@ -93,10 +93,22 @@ def _get_context_data(intent: str, db: Session) -> Optional[dict]:
 
 # ── Chat history loader ────────────────────────────────────────────────────────
 
-def _load_history(db: Session, limit: int = 10) -> list:
-    """Load last N chat turns from DB as Gemini-compatible history."""
+def _load_history(db: Session, intent: str = "none", limit: int = 10) -> list:
+    """Load last N chat turns from DB as Gemini-compatible history, matching current intent category."""
+    # Isolated history timelines:
+    # 1. ARCHITECT DATA TIMELINE: Dense data analysis, forecasting, anomalies, risk, agent loop
+    # 2. GENERAL/UI TIMELINE: greetings, basic math, theme control, page navigation
+    data_intents = {"analyze_resources", "detect_anomalies", "predict_costs", "predict_resource_risk", "agent_mode"}
+    is_data = (intent in data_intents)
+
+    query = db.query(ChatLog)
+    if is_data:
+        query = query.filter(ChatLog.intent.in_(data_intents))
+    else:
+        query = query.filter(~ChatLog.intent.in_(data_intents))
+
     logs = (
-        db.query(ChatLog)
+        query
         .order_by(ChatLog.created_at.desc())
         .limit(limit)
         .all()
@@ -182,7 +194,7 @@ def chat(message: str, db: Session) -> dict:
         context_data = _get_context_data(intent, db)
 
     # Step 4: Single Gemini call for final response
-    history = _load_history(db)
+    history = _load_history(db, intent=intent)
     result = generate_response(message, history, context_data)
 
     return {

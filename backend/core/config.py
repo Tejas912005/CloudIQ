@@ -22,7 +22,7 @@ def _load_env():
             continue
         key, value = line.split("=", 1)
         cleaned = value.strip().strip('"').strip("'")
-        os.environ.setdefault(key.strip(), cleaned)
+        os.environ[key.strip()] = cleaned
 
 _load_env()
 
