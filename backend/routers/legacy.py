@@ -9,6 +9,7 @@ calls that still use /api/summary, /api/anomalies, etc.
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
+from core.auth import verify_api_key
 from core.database import get_db
 from models.models import CloudResource, CostHistory, Recommendation
 from services.anomaly_service import detect_cost_anomalies
@@ -18,7 +19,7 @@ from services.recommendation_service import generate_recommendations
 router = APIRouter(prefix="/api", tags=["Legacy (Backward Compat)"])
 
 
-@router.get("/summary")
+@router.get("/summary", dependencies=[Depends(verify_api_key)])
 def summary(db: Session = Depends(get_db)):
     """Legacy: was /api/summary in Flask. Maps to /api/analyze now."""
     resources = db.query(CloudResource).all()
@@ -49,7 +50,7 @@ def summary(db: Session = Depends(get_db)):
     }
 
 
-@router.get("/resources")
+@router.get("/resources", dependencies=[Depends(verify_api_key)])
 def resources(db: Session = Depends(get_db)):
     """Legacy: was /api/resources in Flask."""
     rows = db.query(CloudResource).all()
@@ -68,26 +69,26 @@ def resources(db: Session = Depends(get_db)):
     ]
 
 
-@router.get("/cost-history")
+@router.get("/cost-history", dependencies=[Depends(verify_api_key)])
 def cost_history(db: Session = Depends(get_db)):
     """Legacy: was /api/cost-history in Flask."""
     rows = db.query(CostHistory).order_by(CostHistory.date).all()
     return [{"date": r.date, "daily_cost": r.daily_cost, "is_anomaly": r.is_anomaly} for r in rows]
 
 
-@router.get("/anomalies")
+@router.get("/anomalies", dependencies=[Depends(verify_api_key)])
 def anomalies(db: Session = Depends(get_db)):
     """Legacy: was /api/anomalies in Flask."""
     return detect_cost_anomalies(db)
 
 
-@router.get("/predictions")
+@router.get("/predictions", dependencies=[Depends(verify_api_key)])
 def predictions(db: Session = Depends(get_db)):
     """Legacy: was /api/predictions in Flask."""
     return get_full_prediction_report(db)
 
 
-@router.get("/recommendations")
+@router.get("/recommendations", dependencies=[Depends(verify_api_key)])
 def recommendations(db: Session = Depends(get_db)):
     """Legacy: was /api/recommendations in Flask."""
     return generate_recommendations(db)

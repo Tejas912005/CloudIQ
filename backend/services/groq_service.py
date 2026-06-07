@@ -19,6 +19,7 @@ from typing import Iterator, Optional
 
 from core.config import settings
 from core.prompts import CLOUDIQ_SYSTEM_PROMPT
+from services.shared_utils import build_context_prompt as _build_context_prompt
 
 logger = logging.getLogger("cloudiq.groq_service")
 
@@ -26,24 +27,7 @@ GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions"
 GROQ_MODEL = settings.GROQ_MODEL if settings.GROQ_MODEL else "llama-3.3-70b-versatile"
 
 
-def _build_context_prompt(context_data: Optional[dict]) -> str:
-    """Build the data context string to inject into the LLM message."""
-    if not context_data:
-        return ""
-
-    if context_data.get("AGENT_MODE_WORKFLOW"):
-        tools_used = ", ".join(context_data.get("tools_used", []))
-        results_json = json.dumps(context_data.get("results", {}), indent=2, default=str)
-        return (
-            f"\n\n--- CLOUDIQ SYSTEM DATA ---\n"
-            f"Analysis Results:\n{results_json}\n"
-            f"Tools Used: {tools_used}\n"
-            f"---------------------------\n"
-            f"Based on this data, provide a structured response with:\n"
-            f"1. Summary  2. Key Findings  3. Recommendations  4. Estimated Impact"
-        )
-    else:
-        return f"\n\n[SYSTEM CONTEXT — use this data in your response]:\n{json.dumps(context_data, indent=2, default=str)}\n"
+# _build_context_prompt is imported above from services.shared_utils
 
 
 def is_groq_active() -> bool:

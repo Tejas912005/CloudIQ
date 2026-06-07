@@ -1,6 +1,6 @@
 import { Suspense, lazy, useEffect } from 'react';
 import { BrowserRouter as Router, Navigate, Route, Routes, useLocation } from 'react-router-dom';
-import { AnimatePresence, motion } from 'framer-motion';
+import { AnimatePresence, motion as Motion } from 'framer-motion';
 import ErrorBoundary from './components/ErrorBoundary';
 import AppShell from './components/layout/AppShell';
 import { LoadingState } from './components/StatusPanel';
@@ -40,7 +40,7 @@ function AnimatedRoutes() {
   const location = useLocation();
   return (
     <AnimatePresence mode="wait">
-      <motion.div
+      <Motion.div
         key={location.pathname}
         variants={pageVariants}
         initial="initial"
@@ -63,7 +63,7 @@ function AnimatedRoutes() {
           <Route path="/recommendations" element={<Navigate to="/actions" replace />} />
           <Route path="*"                element={<Navigate to="/" replace />} />
         </Routes>
-      </motion.div>
+      </Motion.div>
     </AnimatePresence>
   );
 }

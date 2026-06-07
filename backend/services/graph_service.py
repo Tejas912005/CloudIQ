@@ -90,14 +90,14 @@ def build_graph(db: Session) -> nx.DiGraph:
 #  RISK SCORING
 # ══════════════════════════════════════════════════════════════════════════════
 
-def compute_risk_analysis(db: Session) -> List[Dict]:
+def compute_risk_analysis(db: Session, graph=None) -> List[Dict]:
     """
     Build graph, score every node, persist updated risk_score to DB.
     Returns list of dicts sorted by risk_score descending.
-    Reuses build_graph() to avoid duplicate DB queries.
+    Accepts an optional pre-built graph to avoid duplicate build_graph calls.
     """
     # ── Reuse build_graph() — no duplicate DB queries ─────────────────────────
-    G = build_graph(db)
+    G = graph if graph is not None else build_graph(db)
     resources = db.query(CloudResource).all()
     resource_map: Dict[int, CloudResource] = {r.id: r for r in resources}
 

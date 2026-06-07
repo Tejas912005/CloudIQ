@@ -14,6 +14,7 @@ from typing import Iterator, Optional
 from services import gemini_service
 from services import groq_service
 from services import rag_memory
+from core.intent_utils import GREETING_PHRASES, IDENTITY_PHRASES
 
 logger = logging.getLogger("cloudiq.langchain_router")
 
@@ -112,9 +113,9 @@ def stream_routed_response(
     message_lower = message.strip().lower()
     full_response = ""
     
-    is_greeting = message_lower in ["hi", "hello", "hey", "hii", "hey there", "good morning", "good afternoon", "yo"]
-    is_identity = any(q in message_lower for q in ["who are you", "what is your name", "what is cloudiq", "introduce yourself"])
-    is_help = any(q in message_lower for q in ["help", "capabilities", "what can you do", "features"])
+    is_greeting = message_lower in GREETING_PHRASES
+    is_identity = any(q in message_lower for q in IDENTITY_PHRASES)
+    is_help = any(q in message_lower for q in ["capabilities", "what can you do", "features"])
     
     import re
     is_math = False

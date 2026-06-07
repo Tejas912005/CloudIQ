@@ -12,6 +12,7 @@ import logging
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
+from core.auth import verify_api_key
 from core.database import get_db
 from schemas.schemas import (
     GraphResponse, GraphNode, GraphEdge, GraphStats,
@@ -28,7 +29,7 @@ logger = logging.getLogger("cloudiq.router.graph")
 router = APIRouter(prefix="/api/graph", tags=["Graph"])
 
 
-@router.get("", response_model=GraphResponse)
+@router.get("", response_model=GraphResponse, dependencies=[Depends(verify_api_key)])
 def get_graph(db: Session = Depends(get_db)):
     """
     Returns the full cloud resource dependency graph.
@@ -37,17 +38,15 @@ def get_graph(db: Session = Depends(get_db)):
     Use this to visualize your cloud topology and identify risk clusters.
     """
     try:
-        # Get risk analysis to enrich node data
-        risk_data = compute_risk_analysis(db)
+        # Build the graph ONCE and reuse for both risk analysis and node construction
+        G        = build_graph(db)
+        stats    = get_graph_stats(G)
+        risk_data = compute_risk_analysis(db, graph=G)   # pass graph to avoid rebuild
         risk_map = {r["id"]: r for r in risk_data}
 
-        G = build_graph(db)
-        stats = get_graph_stats(G)
-
-        # Build typed node list
         nodes = []
         for node_id in G.nodes:
-            attrs = G.nodes[node_id]
+            attrs  = G.nodes[node_id]
             r_data = risk_map.get(node_id, {})
             nodes.append(GraphNode(
                 id=node_id,
@@ -58,19 +57,20 @@ def get_graph(db: Session = Depends(get_db)):
                 region=attrs.get("region", ""),
                 risk_score=r_data.get("risk_score", attrs.get("risk_score", 0)),
                 risk_level=r_data.get("risk_level", "Low"),
-                status=attrs.get("status", "active"),
-                sensitivity=attrs.get("sensitivity", "Low"),
+                status=attrs.get("status", "Healthy"),
+                monthly_cost=attrs.get("monthly_cost", 0),
+                cpu_usage=attrs.get("cpu_usage", 0),
+                memory_usage=attrs.get("memory_usage", 0),
+                latency_ms=attrs.get("latency_ms", 0),
+                error_rate=attrs.get("error_rate", 0),
                 public_access=attrs.get("public_access", False),
-                cpu_usage=attrs.get("cpu_usage", 0.0),
-                memory_usage=attrs.get("memory_usage", 0.0),
-                latency_ms=attrs.get("latency_ms", 0.0),
-                error_rate=attrs.get("error_rate", 0.0),
-                monthly_cost=attrs.get("monthly_cost", 0.0),
+                sensitivity=attrs.get("sensitivity", "Low"),
             ))
 
-        # Build typed edge list
-        connections = db.query(ResourceConnection).all()
-        uid_map = {r.id: r.resource_uid for r in db.query(CloudResource).all()}
+        # Build typed edge list — single scan, reuse graph edges
+        connections   = db.query(ResourceConnection).all()
+        _res_all      = db.query(CloudResource).all()
+        uid_map       = {r.id: r.resource_uid for r in _res_all}
 
         edges = []
         for c in connections:
@@ -92,7 +92,7 @@ def get_graph(db: Session = Depends(get_db)):
         raise
 
 
-@router.get("/blast-radius", response_model=BlastRadiusResponse)
+@router.get("/blast-radius", response_model=BlastRadiusResponse, dependencies=[Depends(verify_api_key)])
 def blast_radius(
     resource_id: int = Query(..., description="Database ID of the source resource"),
     db: Session = Depends(get_db)
@@ -130,7 +130,7 @@ def blast_radius(
     )
 
 
-@router.get("/attack-paths")
+@router.get("/attack-paths", dependencies=[Depends(verify_api_key)])
 def attack_paths(
     source: int = Query(..., description="Source resource database ID"),
     target: int = Query(..., description="Target resource database ID"),
@@ -151,8 +151,10 @@ def attack_paths(
     G = build_graph(db)
     paths = find_attack_paths(G, source, target)
 
-    uid_map  = {r.id: r.resource_uid for r in db.query(CloudResource).all()}
-    name_map = {r.id: r.name for r in db.query(CloudResource).all()}
+    # Single scan — no duplicate queries
+    _all_resources = db.query(CloudResource).all()
+    uid_map  = {r.id: r.resource_uid for r in _all_resources}
+    name_map = {r.id: r.name         for r in _all_resources}
 
     formatted = []
     for path in paths[:10]:  # cap at 10 paths
@@ -169,7 +171,7 @@ def attack_paths(
     return {"source": src.name, "target": tgt.name, "paths": formatted}
 
 
-@router.get("/risk-analysis")
+@router.get("/risk-analysis", dependencies=[Depends(verify_api_key)])
 def risk_analysis(db: Session = Depends(get_db)):
     """
     Full graph-based risk analysis using:

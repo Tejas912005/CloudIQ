@@ -8,6 +8,7 @@ import logging
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
+from core.auth import verify_api_key
 from core.database import get_db
 from schemas.schemas import PredictResponse
 from services.prediction_service import get_full_prediction_report
@@ -17,7 +18,7 @@ logger = logging.getLogger("cloudiq.router.predict")
 router = APIRouter(prefix="/api", tags=["Predict"])
 
 
-@router.get("/predict", response_model=PredictResponse)
+@router.get("/predict", response_model=PredictResponse, dependencies=[Depends(verify_api_key)])
 def predict(db: Session = Depends(get_db)):
     """
     ML-powered predictions:

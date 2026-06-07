@@ -1,3 +1,5 @@
+import { useId } from 'react';
+
 export default function SparkLine({
   data = [],
   width = 60,
@@ -5,6 +7,8 @@ export default function SparkLine({
   color = 'var(--accent)',
   filled = true,
 }) {
+  const generatedId = useId();
+
   if (!data || data.length < 2) return null;
 
   const nums = data.map(Number).filter(n => !isNaN(n));
@@ -32,7 +36,7 @@ export default function SparkLine({
     ? `${linePath} L${points[points.length - 1].x.toFixed(2)},${(pad + h).toFixed(2)} L${pad},${(pad + h).toFixed(2)} Z`
     : null;
 
-  const gradId = `spark-${Math.random().toString(36).slice(2, 7)}`;
+  const gradId = `spark-${generatedId.replace(/:/g, '')}`;
 
   return (
     <svg

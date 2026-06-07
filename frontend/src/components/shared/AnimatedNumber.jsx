@@ -1,13 +1,13 @@
 import { useEffect, useRef } from 'react';
-import { motion, useSpring, useTransform } from 'framer-motion';
+import { motion as Motion, useSpring, useTransform } from 'framer-motion';
 
-export default function AnimatedNumber({ value, prefix = '', suffix = '', duration = 1.2 }) {
+export default function AnimatedNumber({ value, prefix = '', suffix = '' }) {
   const numericValue = typeof value === 'string'
     ? parseFloat(value.replace(/[^0-9.-]+/g, '')) || 0
     : (Number(value) || 0);
 
   const prevValue = useRef(0);
-  const spring = useSpring(0, { bounce: 0, duration: duration * 1000 });
+  const spring = useSpring(0, { stiffness: 180, damping: 18, mass: 0.8 });
 
   const display = useTransform(spring, (current) => {
     const hasDecimals = numericValue % 1 !== 0;
@@ -25,5 +25,15 @@ export default function AnimatedNumber({ value, prefix = '', suffix = '', durati
     }
   }, [numericValue, spring]);
 
-  return <motion.span style={{ fontFamily: 'Space Grotesk, sans-serif' }}>{display}</motion.span>;
+  return (
+    <Motion.span
+      key={numericValue}
+      initial={{ color: 'var(--data)', filter: 'blur(2px)' }}
+      animate={{ color: 'inherit', filter: 'blur(0px)' }}
+      transition={{ duration: 0.35, ease: 'easeOut' }}
+      style={{ fontFamily: 'inherit', display: 'inline-block' }}
+    >
+      {display}
+    </Motion.span>
+  );
 }

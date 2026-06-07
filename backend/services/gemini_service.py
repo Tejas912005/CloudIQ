@@ -17,6 +17,7 @@ import logging
 import json
 import time
 from typing import Iterator, Optional
+from services.shared_utils import build_context_prompt as _build_context_prompt
 
 from core.config import settings
 
@@ -99,8 +100,20 @@ def generate_response(
         logger.warning("[GEMINI] Client not available — routing to local fallback")
         return _local_fallback(message, context_data)
 
+    # Retrieve relevant past interactions from RAG memory
+    try:
+        from services import rag_memory
+        past_interactions = rag_memory.retrieve_relevant_history(message, n_results=3)
+        rag_text = (
+            "\n\n[MEMORY — Relevant past interactions]:\n" +
+            "\n---\n".join(past_interactions)
+            if past_interactions else ""
+        )
+    except Exception:
+        rag_text = ""
+
     # Build full message with context injection
-    context_prompt = _build_context_prompt(context_data)
+    context_prompt = _build_context_prompt(context_data) + rag_text
     full_message = message + context_prompt
 
     start = time.perf_counter()
@@ -139,8 +152,17 @@ def generate_response(
 
         logger.info(f"[GEMINI] ✅ Response received in {latency_ms}ms ({len(response.text)} chars)")
 
+        response_text = response.text
+
+        # Store interaction in RAG memory
+        try:
+            from services import rag_memory
+            rag_memory.store_interaction(message, response_text)
+        except Exception:
+            pass
+
         return {
-            "response":   response.text,
+            "response":   response_text,
             "status":     "ok",
             "mode":       "gemini",
             "latency_ms": latency_ms,
@@ -214,27 +236,10 @@ def stream_response(
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-#  CONTEXT BUILDER
+#  CONTEXT BUILDER — imported from services.shared_utils
 # ══════════════════════════════════════════════════════════════════════════════
-
-def _build_context_prompt(context_data: Optional[dict]) -> str:
-    """Build the data context string to inject into the Gemini message."""
-    if not context_data:
-        return ""
-
-    if context_data.get("AGENT_MODE_WORKFLOW"):
-        tools_used = ", ".join(context_data.get("tools_used", []))
-        results_json = json.dumps(context_data.get('results', {}), indent=2, default=str)
-        return (
-            f"\n\n--- CLOUDIQ SYSTEM DATA ---\n"
-            f"Analysis Results:\n{results_json}\n"
-            f"Tools Used: {tools_used}\n"
-            f"---------------------------\n"
-            f"Based on this data, provide a structured response with:\n"
-            f"1. Summary  2. Key Findings  3. Recommendations  4. Estimated Impact"
-        )
-    else:
-        return f"\n\n[SYSTEM CONTEXT — use this data in your response]:\n{json.dumps(context_data, indent=2, default=str)}\n"
+# _build_context_prompt is already imported at the top of this file from
+# services.shared_utils. The canonical version lives there.
 
 
 # ══════════════════════════════════════════════════════════════════════════════

@@ -15,7 +15,7 @@ export default function Recommendations() {
   const [filter, setFilter] = useState('All');
   const navigate = useNavigate();
 
-  if (loading && !platform) return <LoadingState message="Loading…" />;
+  if (loading && !platform) return <LoadingState message="Computing savings opportunities..." />;
   if (error   && !platform) return <ErrorState title="Unavailable" message={error} onAction={refreshData} />;
   if (!platform)            return <EmptyState  title="No data" message="Waiting for insights." />;
 

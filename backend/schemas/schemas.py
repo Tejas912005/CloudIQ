@@ -173,3 +173,13 @@ class HealthResponse(BaseModel):
     version:        str
     gemini_active:  bool
     message:        str
+
+
+# ══════════════════════════════════════════════════════════════════
+#  STANDARD ERROR RESPONSE (Phase 7 — used by all routers)
+# ══════════════════════════════════════════════════════════════════
+class ErrorResponse(BaseModel):
+    status:  str = "error"
+    message: str
+    detail:  str = ""
+

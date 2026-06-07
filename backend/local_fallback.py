@@ -16,6 +16,15 @@ def infer_intent_from_keywords(message: str) -> str:
     if any(keyword in text for keyword in ["theme", "accent", "color", "font", "style", "appearance", "dark mode", "light mode", "layout", "css", "background"]):
         return "ui_theme_control"
 
+    # --- AGENTIC EXECUTION INTENTS (High Specificity) ---
+    # Stop unhealthy / risky / over-utilized resources -> simulated over-utilized mitigation
+    if any(keyword in text for keyword in ["stop", "terminate", "kill", "shut down", "disable"]) and any(keyword in text for keyword in ["risky", "unhealthy", "overutilized", "over-utilized", "over utilized", "over-utilized"]):
+        return "stop_risky_resources"
+
+    if any(keyword in text for keyword in ["stop", "terminate", "kill", "shut down", "disable"]) and any(keyword in text for keyword in ["overutilized", "over-utilized", "over utilized"]):
+        return "stop_overutilized_resources"
+
+
     # --- GENERAL ANALYSIS INTENTS ---
     if any(keyword in text for keyword in ["summary", "overview", "status"]) and any(keyword in text for keyword in ["cloud", "system", "cost", "resource", "infrastructure"]):
         return "agent_mode"

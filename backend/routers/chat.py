@@ -11,11 +11,12 @@ from fastapi import APIRouter, Depends
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
+from core.auth import verify_api_key
 from core.database import get_db
 from schemas.schemas import ChatRequest, ChatResponse
 from models.models import ChatLog
 from agents.chat_controller import _get_context_data, _load_history
-from local_fallback import infer_intent_from_keywords
+from core.intent_utils import resolve_intent as _resolve_intent
 from services.langchain_router import stream_routed_response
 
 logger = logging.getLogger("cloudiq.router.chat")
@@ -23,17 +24,7 @@ logger = logging.getLogger("cloudiq.router.chat")
 router = APIRouter(prefix="/api", tags=["Chat"])
 
 
-def _resolve_intent(message: str) -> str:
-    """Fast keyword-based intent detection. No Gemini call needed here."""
-    intent = infer_intent_from_keywords(message)
-    agent_keywords = [
-        "what if", "simulate", "optimize", "summary", "overview",
-        "reduce", "improve", "audit", "find issues", "analyze all",
-        "help me", "what should", "recommend"
-    ]
-    if any(kw in message.lower() for kw in agent_keywords):
-        intent = "agent_mode"
-    return intent
+
 
 
 def extract_json_commands(text: str) -> list:
@@ -79,7 +70,7 @@ def extract_json_commands(text: str) -> list:
 
 
 
-@router.post("/chat", response_model=ChatResponse)
+@router.post("/chat", response_model=ChatResponse, dependencies=[Depends(verify_api_key)])
 def chat_endpoint(req: ChatRequest, db: Session = Depends(get_db)):
     """
     AI Cloud Assistant — powered by Gemini 1.5 Flash with local fallback.
@@ -118,7 +109,7 @@ def chat_endpoint(req: ChatRequest, db: Session = Depends(get_db)):
         )
 
 
-@router.post("/chat/stream")
+@router.post("/chat/stream", dependencies=[Depends(verify_api_key)])
 def chat_stream_endpoint(req: ChatRequest, db: Session = Depends(get_db)):
     """SSE endpoint for token-by-token assistant responses."""
     message = (req.message or "").strip()
@@ -170,7 +161,22 @@ def chat_stream_endpoint(req: ChatRequest, db: Session = Depends(get_db)):
             return
         # -----------------------------------
 
+        # Stop risky/unhealthy resources -> demo simulation of over-utilized mitigation
+        elif intent in ["stop_risky_resources", "stop_overutilized_resources"]:
+            yield event({"type": "token", "text": "I found 5 high-risk over-utilized resources. Please approve the execution card to stop them and reduce risk.\n\n"})
+            yield event({
+                "type": "action",
+                "command": "execute_tool",
+                "title": "Stop Risky / Over-Utilized Resources",
+                "description": "Stops 5 over-utilized demo resources (demo simulation). No real cloud operations will be performed.",
+                "actionId": "stop_overutilized_123",
+                "endpoint": "/api/agent/execute"
+            })
+            yield event({"type": "done", "intent": intent})
+            return
+
         import re as _re
+
 
         def parse_stream_buffer(buf: str, is_final: bool = False):
             actions = []
@@ -286,10 +292,29 @@ from pydantic import BaseModel
 class AgentAction(BaseModel):
     actionId: str
 
-@router.post("/agent/execute")
+@router.post("/agent/execute", dependencies=[Depends(verify_api_key)])
 def execute_agent_action(action: AgentAction, db: Session = Depends(get_db)):
     """Executes a specific agent mutation against the database."""
     from models.models import CloudResource
+
+    # Only simulated demo actions are allowed (no real cloud operations)
+    allowed_action_ids = {
+        "term_idle_123",          # terminate Idle demo resources
+        "stop_overutilized_123", # terminate Over-Utilized demo resources
+        "mark_high_risk_review_123", # mark top risks for review (no termination)
+    }
+
+    if action.actionId not in allowed_action_ids:
+        return {
+            "status": "error",
+            "message": (
+                "Action not supported in CloudIQ simulation. "
+                "Only simulated actionIds are allowed: "
+                f"{sorted(list(allowed_action_ids))}."
+            )
+        }
+
+    # Simulated action mutations only (no real cloud operations)
     if action.actionId == "term_idle_123":
         # Simulate terminating the idle resources
         idle_resources = db.query(CloudResource).filter(CloudResource.status == "Idle").limit(5).all()
@@ -297,14 +322,63 @@ def execute_agent_action(action: AgentAction, db: Session = Depends(get_db)):
             res.status = "Terminated"
         try:
             db.commit()
-            return {"status": "success", "message": f"Successfully terminated {len(idle_resources)} idle resources. Estimated savings: $320/month."}
+            return {
+                "status": "success",
+                "message": f"Successfully terminated {len(idle_resources)} idle resources. Estimated savings: $320/month."
+            }
         except Exception as e:
             db.rollback()
             return {"status": "error", "message": str(e)}
+
+    if action.actionId == "stop_overutilized_123":
+        # Simulate stopping/mitigating over-utilized resources
+        over_resources = (
+            db.query(CloudResource)
+            .filter(CloudResource.status == "Over-Utilized")
+            .limit(5)
+            .all()
+        )
+        for res in over_resources:
+            res.status = "Terminated"
+        try:
+            db.commit()
+            return {
+                "status": "success",
+                "message": (
+                    f"Successfully stopped {len(over_resources)} over-utilized resources (demo simulation). "
+                    "This reduces risk and prevents further simulated load."
+                )
+            }
+        except Exception as e:
+            db.rollback()
+            return {"status": "error", "message": str(e)}
+
+    if action.actionId == "mark_high_risk_review_123":
+        # Simulate placing high-risk resources into review mode (no termination)
+        # Note: we do not have risk score in the DB, so we approximate by selecting top over-utilized resources.
+        review_resources = (
+            db.query(CloudResource)
+            .filter(CloudResource.status.in_(["Over-Utilized", "Idle"]))
+            .limit(5)
+            .all()
+        )
+        for res in review_resources:
+            res.status = "Investigating"
+        try:
+            db.commit()
+            return {
+                "status": "success",
+                "message": f"Marked {len(review_resources)} resources as Investigating (demo simulation)."
+            }
+        except Exception as e:
+            db.rollback()
+            return {"status": "error", "message": str(e)}
+
     return {"status": "error", "message": "Unknown action ID"}
 
 
-@router.post("/chat/clear")
+
+@router.post("/chat/clear", dependencies=[Depends(verify_api_key)])
 def clear_chat_endpoint(db: Session = Depends(get_db)):
     """Clear all chat logs from database for a fresh session."""
     try:

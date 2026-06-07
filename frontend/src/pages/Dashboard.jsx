@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { RefreshCcw } from 'lucide-react';
+import { RefreshCcw, Zap } from 'lucide-react';
 import AgentFlow from '../components/dashboard/AgentFlow';
 import ThinkingConsole from '../components/dashboard/ThinkingConsole';
 import {
@@ -15,6 +15,28 @@ import SparkLine from '../components/shared/SparkLine';
 import WhatIfSimulator from '../components/dashboard/WhatIfSimulator';
 import { useCloudIQ } from '../hooks/useCloudIQ';
 import { formatCurrency } from '../lib/formatters';
+import { FadeUp, StaggerParent, StaggerChild, PressButton } from '../components/shared/Motion';
+
+function getMetricTone(cardId) {
+  if (cardId === 'anomaly') return 'var(--warning)';
+  if (cardId === 'risk') return 'var(--danger)';
+  return 'var(--data)';
+}
+
+function getAccentTone(cardId) {
+  if (cardId === 'savings') return 'var(--success)';
+  if (cardId === 'anomaly') return 'var(--warning)';
+  if (cardId === 'risk') return 'var(--danger)';
+  return 'var(--data)';
+}
+
+function getSummaryTone(label) {
+  const normalized = label.toLowerCase();
+  if (normalized.includes('idle')) return 'var(--warning)';
+  if (normalized.includes('over')) return 'var(--danger)';
+  if (normalized.includes('healthy')) return 'var(--success)';
+  return 'var(--accent)';
+}
 
 export default function Dashboard() {
   const { platform, loading, error, refreshData } = useCloudIQ();
@@ -28,150 +50,203 @@ export default function Dashboard() {
     return () => window.clearInterval(timer);
   }, [platform]);
 
-  if (loading && !platform) return <LoadingState message="Initialising…" />;
-  if (error   && !platform) return <ErrorState title="Unavailable" message={error} onAction={refreshData} />;
-  if (!platform)            return <EmptyState  title="No data" message="Waiting for telemetry." />;
+  if (loading && !platform) return <LoadingState message="Loading your cloud overview..." />;
+  if (error && !platform) return <ErrorState title="Unavailable" message={error} onAction={refreshData} />;
+  if (!platform) return <EmptyState title="No data" message="Waiting for telemetry." />;
 
   return (
-    <div className="mx-auto flex max-w-[1600px] flex-col gap-5 animate-fade relative"
-         style={{ position: 'relative', isolation: 'isolate' }}>
+    <div
+      className="relative mx-auto flex max-w-[1600px] flex-col gap-5"
+      style={{ isolation: 'isolate' }}
+    >
       <ParticleField />
 
-      <div style={{ position: 'relative', zIndex: 1 }} className="flex flex-col gap-5">
-      {/* Top: Key metric cards */}
-      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-        {platform.insightCards.map((card, idx) => {
-          const isCurrency = String(card.value).includes('$');
-          const prefix = isCurrency ? (String(card.value).includes('+') ? '+$' : '$') : '';
-          return (
-            <GlassPanel
-              key={card.id}
-              className="card-lift p-4 animate-fade-up"
-              style={{ animationDelay: `${idx * 60}ms` }}
-            >
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                <p className="text-[10px] uppercase tracking-widest" style={{ color: 'var(--text-dim)' }}>
-                  {card.title}
-                </p>
-                {card.sparkData?.length > 1 && (
-                  <SparkLine
-                    data={card.sparkData}
-                    width={50}
-                    height={18}
-                    color={card.id === 'savings' ? 'var(--success)'
-                         : card.id === 'anomaly' ? 'var(--warning)'
-                         : card.id === 'risk' ? 'var(--danger)'
-                         : 'var(--accent)'}
+      <div className="relative z-[1] flex flex-col gap-5">
+        <StaggerParent className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+          {platform.insightCards.map((card) => {
+            const isCurrency = String(card.value).includes('$');
+            const prefix = isCurrency ? (String(card.value).includes('+') ? '+$' : '$') : '';
+            const metricTone = getMetricTone(card.id);
+            const accentTone = getAccentTone(card.id);
+
+            return (
+              <StaggerChild key={card.id}>
+                <GlassPanel className="metric-card">
+                  <div className="flex items-start justify-between gap-3">
+                    <p
+                      className="text-[10px] font-semibold uppercase"
+                      style={{ color: 'var(--text-dim)', letterSpacing: '0.12em' }}
+                    >
+                      {card.title}
+                    </p>
+                    {card.sparkData?.length > 1 && (
+                      <SparkLine
+                        data={card.sparkData}
+                        width={54}
+                        height={20}
+                        color={accentTone}
+                      />
+                    )}
+                  </div>
+
+                  <p
+                    className="mt-3.5 font-display text-[32px] font-bold leading-none"
+                    style={{ color: metricTone }}
+                  >
+                    <AnimatedNumber value={card.rawValue || card.value} prefix={prefix} />
+                  </p>
+
+                  {card.delta && (
+                    <div className="mt-2.5">
+                      <DeltaBadge
+                        value={card.delta}
+                        trend={card.trend}
+                        invertColors={card.id === 'savings'}
+                      />
+                    </div>
+                  )}
+
+                  <div
+                    className="absolute inset-x-0 bottom-0 h-0.5"
+                    style={{ background: accentTone, borderRadius: '0 0 14px 14px' }}
                   />
-                )}
-              </div>
-              <p className="mt-3 font-display text-3xl" style={{ color: 'var(--text-base)' }}>
-                <AnimatedNumber value={card.rawValue || card.value} prefix={prefix} />
-              </p>
-              {card.delta && (
-                <div style={{ marginTop: '8px' }}>
-                  <DeltaBadge
-                    value={card.delta}
-                    trend={card.trend}
-                    invertColors={card.id === 'savings'}
-                  />
+                </GlassPanel>
+              </StaggerChild>
+            );
+          })}
+        </StaggerParent>
+
+        <FadeUp delay={0.18} className="grid gap-5 xl:grid-cols-[1.4fr_1fr]">
+            <GlassPanel className="space-y-4 p-5" glow>
+              <div className="flex items-center justify-between gap-3">
+                <div className="flex items-center gap-2">
+                  <Zap className="h-4 w-4" style={{ color: 'var(--accent)' }} />
+                  <h3 className="font-display text-base font-semibold" style={{ color: 'var(--text-base)' }}>
+                    Cost Transformation
+                  </h3>
                 </div>
-              )}
-            </GlassPanel>
-          );
-        })}
-      </div>
-
-      {/* Middle: Cost transformation + Summary */}
-      <div className="grid gap-5 xl:grid-cols-[1.4fr_1fr]">
-
-        {/* Cost transformation */}
-        <GlassPanel className="p-5 space-y-4">
-          <div className="flex items-center justify-between">
-            <h3 className="font-display text-base font-medium" style={{ color: 'var(--text-base)' }}>Cost Transformation</h3>
-            <button className="command-button" onClick={refreshData}>
-              <RefreshCcw className="h-3.5 w-3.5" />
-              <span className="hidden sm:inline">Refresh</span>
-            </button>
-          </div>
-
-          <div className="space-y-3">
-            <div>
-              <div className="mb-1.5 flex justify-between text-sm" style={{ color: 'var(--text-muted)' }}>
-                <span>Before</span>
-                <span>{formatCurrency(platform.beforeAfter.before)}</span>
+                <PressButton className="command-button" onClick={refreshData} type="button">
+                  <RefreshCcw className="h-3.5 w-3.5" />
+                  <span className="hidden sm:inline">Refresh</span>
+                </PressButton>
               </div>
-              <div className="h-2 overflow-hidden rounded-full" style={{ background: 'var(--surface-2)' }}>
-                <div
-                  className="h-full w-full rounded-full transition-all duration-700"
-                  style={{ background: 'var(--text-dim)' }}
-                />
-              </div>
-            </div>
 
-            <div>
-              <div className="mb-1.5 flex justify-between text-sm" style={{ color: 'var(--text-muted)' }}>
-                <span>After</span>
-                <span>{formatCurrency(platform.beforeAfter.after)}</span>
-              </div>
-              <div className="h-2 overflow-hidden rounded-full" style={{ background: 'var(--surface-2)' }}>
-                <div
-                  className="h-full rounded-full transition-all duration-700"
-                  style={{
-                    background: 'var(--success)',
-                    width: `${(platform.beforeAfter.after / Math.max(platform.beforeAfter.before || 1, 1)) * 100}%`,
-                  }}
-                />
-              </div>
-            </div>
-          </div>
+              <div className="space-y-4">
+                <div>
+                  <div className="mb-1.5 flex justify-between text-sm" style={{ color: 'var(--text-muted)' }}>
+                    <span>Before</span>
+                    <span className="font-mono-data">{formatCurrency(platform.beforeAfter.before)}</span>
+                  </div>
+                  <div className="h-2.5 overflow-hidden rounded-full" style={{ background: 'var(--surface-2)' }}>
+                    <div
+                      className="h-full w-full rounded-full transition-all duration-700"
+                      style={{
+                        background: 'repeating-linear-gradient(45deg, var(--text-dim), var(--text-dim) 2px, transparent 2px, transparent 8px)',
+                      }}
+                    />
+                  </div>
+                </div>
 
-          <div
-            className="rounded-lg border p-3"
-            style={{ borderColor: 'rgba(34,197,94,0.15)', background: 'rgba(34,197,94,0.06)' }}
-          >
-            <p className="text-[10px] uppercase tracking-widest" style={{ color: 'var(--success)' }}>Savings</p>
-            <p className="mt-1 font-display text-2xl" style={{ color: 'var(--text-base)' }}>{formatCurrency(platform.beforeAfter.savings)}</p>
-          </div>
-          <WhatIfSimulator />
-        </GlassPanel>
+                <div>
+                  <div className="mb-1.5 flex justify-between text-sm" style={{ color: 'var(--text-muted)' }}>
+                    <span>After</span>
+                    <span className="font-mono-data">{formatCurrency(platform.beforeAfter.after)}</span>
+                  </div>
+                  <div className="h-2.5 overflow-hidden rounded-full" style={{ background: 'var(--surface-2)' }}>
+                    <div
+                      className="h-full rounded-full transition-all duration-700"
+                      style={{
+                        background: 'linear-gradient(90deg, var(--success), var(--data))',
+                        width: `${(platform.beforeAfter.after / Math.max(platform.beforeAfter.before || 1, 1)) * 100}%`,
+                      }}
+                    />
+                  </div>
+                </div>
+              </div>
 
-        {/* System summary */}
-        <GlassPanel className="p-5">
-          <h3 className="font-display text-base font-medium mb-4" style={{ color: 'var(--text-base)' }}>System Summary</h3>
-          <div className="space-y-3">
-            {platform.summaryMetrics.map((metric) => {
-              const valueColor =
-                metric.label.toLowerCase().includes('idle') ? 'var(--warning)' :
-                metric.label.toLowerCase().includes('over') ? 'var(--danger)' :
-                metric.label.toLowerCase().includes('healthy') ? 'var(--success)' :
-                'var(--accent)';
-              return (
-                <div
-                  key={metric.label}
-                  className="rounded-lg border p-3"
-                  style={{ borderColor: 'var(--border)', background: 'var(--surface)' }}
+              <div
+                className="rounded-[14px] border p-3"
+                style={{
+                  borderColor: 'var(--success-border)',
+                  background: 'var(--success-soft)',
+                  animation: 'borderFlow 3s ease-in-out infinite',
+                }}
+              >
+                <p
+                  className="text-[10px] font-semibold uppercase"
+                  style={{ color: 'var(--success)', letterSpacing: '0.12em' }}
                 >
-                  <p className="text-[10px] uppercase tracking-widest" style={{ color: 'var(--text-dim)' }}>{metric.label}</p>
-                  <p className="mt-1 font-display text-2xl" style={{ color: valueColor }}>{metric.value}</p>
-                </div>
-              );
-            })}
-          </div>
-        </GlassPanel>
-      </div>
+                  Savings
+                </p>
+                <p className="mt-1 font-display text-2xl font-bold" style={{ color: 'var(--text-base)' }}>
+                  {formatCurrency(platform.beforeAfter.savings)}
+                </p>
+              </div>
 
-      {/* Bottom: Agent flow (subtle) + Thinking console */}
-      <GlassPanel className="p-4 space-y-3">
-        <ThinkingConsole
-          steps={platform.heroSteps}
-          activeIndex={activeStep}
-        />
-        <AgentFlow
-          nodes={platform.agentNodes}
-          activeIndex={activeStep % platform.agentNodes.length}
-        />
-      </GlassPanel>
+              <WhatIfSimulator />
+            </GlassPanel>
+
+            <GlassPanel className="p-5">
+              <h3 className="mb-4 font-display text-base font-semibold" style={{ color: 'var(--text-base)' }}>
+                System Summary
+              </h3>
+              <div className="space-y-3">
+                {platform.summaryMetrics.map((metric) => {
+                  const valueColor = getSummaryTone(metric.label);
+
+                  return (
+                    <div
+                      key={metric.label}
+                      className="rounded-[12px] border p-3"
+                      style={{
+                        borderColor: 'var(--border)',
+                        borderLeft: `3px solid ${valueColor}`,
+                        background: 'var(--surface)',
+                      }}
+                    >
+                      <p
+                        className="text-[10px] font-semibold uppercase"
+                        style={{ color: 'var(--text-dim)', letterSpacing: '0.12em' }}
+                      >
+                        {metric.label}
+                      </p>
+                      <p className="mt-1 font-display text-2xl font-bold" style={{ color: valueColor }}>
+                        {metric.value}
+                      </p>
+                    </div>
+                  );
+                })}
+              </div>
+            </GlassPanel>
+        </FadeUp>
+
+        <FadeUp delay={0.28}>
+          <GlassPanel
+            className="space-y-3 p-4"
+            style={{ background: 'linear-gradient(135deg, var(--bg-card), var(--surface))' }}
+          >
+            <div className="flex items-center gap-2">
+              <span
+                className="h-2 w-2 rounded-full"
+                style={{
+                  background: 'var(--accent)',
+                  animation: 'glowPulse 2.2s ease-in-out infinite',
+                }}
+              />
+              <h3 className="font-display text-base font-semibold" style={{ color: 'var(--text-base)' }}>
+                Agent Intelligence
+              </h3>
+            </div>
+            <ThinkingConsole
+              steps={platform.heroSteps}
+              activeIndex={activeStep}
+            />
+            <AgentFlow
+              nodes={platform.agentNodes}
+              activeIndex={activeStep % platform.agentNodes.length}
+            />
+          </GlassPanel>
+        </FadeUp>
       </div>
     </div>
   );

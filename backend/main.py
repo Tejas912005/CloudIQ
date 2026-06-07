@@ -132,7 +132,7 @@ app.add_middleware(
 )
 
 # ── Include Routers ───────────────────────────────────────────────────────────
-from routers import chat, analyze, predict, recommend, graph, health
+from routers import chat, analyze, predict, recommend, graph, health, upload, exports
 
 app.include_router(chat.router)
 app.include_router(analyze.router)
@@ -140,6 +140,9 @@ app.include_router(predict.router)
 app.include_router(recommend.router)
 app.include_router(graph.router)
 app.include_router(health.router)
+app.include_router(upload.router)
+app.include_router(exports.router)
+
 
 # Keep backward-compat routes for old Flask endpoints
 from routers import legacy

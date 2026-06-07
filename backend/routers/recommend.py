@@ -8,6 +8,7 @@ import logging
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
+from core.auth import verify_api_key
 from core.database import get_db
 from schemas.schemas import RecommendResponse, RecommendationItem
 from services.recommendation_service import generate_recommendations
@@ -17,7 +18,7 @@ logger = logging.getLogger("cloudiq.router.recommend")
 router = APIRouter(prefix="/api", tags=["Recommend"])
 
 
-@router.get("/recommend", response_model=RecommendResponse)
+@router.get("/recommend", response_model=RecommendResponse, dependencies=[Depends(verify_api_key)])
 def recommend(db: Session = Depends(get_db)):
     """
     Intelligent recommendation engine combining:

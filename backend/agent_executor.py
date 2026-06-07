@@ -1,7 +1,13 @@
 from tools import get_tool_data
+from sqlalchemy.orm import Session
 
-def execute_plan(plan: list) -> dict:
-    """Executes the sequence of tools determined by the agent planner."""
+
+def execute_plan(plan: list, db: Session) -> dict:
+    """Executes the sequence of tools determined by the agent planner.
+    
+    FIXED: Now accepts the request-scoped db Session instead of opening
+    its own connection. This keeps all operations in the same transaction.
+    """
     results = {}
     
     for item in plan:
@@ -12,7 +18,7 @@ def execute_plan(plan: list) -> dict:
             if not action:
                 continue
                 
-            data = get_tool_data(action)
+            data = get_tool_data(action, db)
             
             # Mark fallback or empty states gracefully to not block execution
             if not data or "error" in data:

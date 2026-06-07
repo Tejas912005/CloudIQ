@@ -1,8 +1,10 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Play } from 'lucide-react';
+import { motion as Motion } from 'framer-motion';
 import { useCloudIQ } from '../../hooks/useCloudIQ';
 import AnimatedNumber from '../shared/AnimatedNumber';
+import { SpringNumber } from '../shared/Motion';
 
 export default function WhatIfSimulator() {
   const { platform } = useCloudIQ();
@@ -22,7 +24,7 @@ export default function WhatIfSimulator() {
   };
 
   return (
-    <div style={{ padding: '20px', background: 'rgba(255,255,255,0.02)', borderRadius: '12px', border: '1px solid var(--border)', marginTop: '20px' }}>
+    <div style={{ padding: '20px', background: 'var(--surface)', borderRadius: '12px', border: '1px solid var(--border)', marginTop: '20px' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
           <div style={{ padding: '6px', background: 'var(--accent-soft)', borderRadius: '6px' }}>
@@ -61,38 +63,44 @@ export default function WhatIfSimulator() {
                       letterSpacing: '0.1em', color: 'var(--text-dim)', marginBottom: '4px' }}>
             Projected Spend
           </p>
-          <p style={{ fontSize: '20px', fontFamily: 'Space Grotesk, sans-serif',
-                      fontWeight: 700, color: 'var(--text-base)' }}>
-            $<AnimatedNumber value={projectedTotal} />
+          <p className="font-mono-data" style={{ fontSize: '20px', fontWeight: 700, color: 'var(--text-base)' }}>
+            <SpringNumber value={projectedTotal}>
+              <AnimatedNumber value={projectedTotal} prefix="$" />
+            </SpringNumber>
           </p>
         </div>
         <div style={{ padding: '14px',
-                      background: projectedSavings > 0 ? 'rgba(16,217,138,0.08)' : 'var(--surface)',
-                      border: `1px solid ${projectedSavings > 0 ? 'rgba(16,217,138,0.2)' : 'var(--border)'}`,
+                      background: projectedSavings > 0 ? 'var(--success-soft)' : 'var(--surface)',
+                      border: `1px solid ${projectedSavings > 0 ? 'var(--success-border)' : 'var(--border)'}`,
                       borderRadius: '10px',
                       transition: 'all 0.3s ease' }}>
           <p style={{ fontSize: '10px', textTransform: 'uppercase',
                       letterSpacing: '0.1em', color: 'var(--text-dim)', marginBottom: '4px' }}>
             You Save
           </p>
-          <p style={{ fontSize: '20px', fontFamily: 'Space Grotesk, sans-serif',
+          <p className="font-mono-data" style={{ fontSize: '20px',
                       fontWeight: 700, color: projectedSavings > 0 ? 'var(--success)' : 'var(--text-dim)',
                       transition: 'color 0.3s ease' }}>
-            +$<AnimatedNumber value={projectedSavings} />
+            <SpringNumber value={projectedSavings}>
+              <AnimatedNumber value={projectedSavings} prefix="+$" />
+            </SpringNumber>
           </p>
         </div>
       </div>
 
-      <button 
+      <Motion.button
         onClick={handleExecute}
         disabled={idleToStop === 0}
         className="card-lift"
+        whileHover={idleToStop > 0 ? { scale: 1.02, y: -1 } : {}}
+        whileTap={idleToStop > 0 ? { scale: 0.98, y: 1 } : {}}
+        transition={{ type: 'spring', stiffness: 500, damping: 25 }}
         style={{ 
           width: '100%', 
           padding: '12px', 
           borderRadius: '8px', 
           background: idleToStop > 0 ? 'var(--accent)' : 'var(--surface-2)',
-          color: idleToStop > 0 ? '#fff' : 'var(--text-dim)',
+          color: idleToStop > 0 ? 'var(--text-on-accent)' : 'var(--text-dim)',
           fontWeight: 600,
           border: 'none',
           cursor: idleToStop > 0 ? 'pointer' : 'not-allowed',
@@ -101,7 +109,7 @@ export default function WhatIfSimulator() {
         }}
       >
         Ask Agent to Execute
-      </button>
+      </Motion.button>
     </div>
   );
 }

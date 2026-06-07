@@ -10,6 +10,7 @@ from datetime import datetime
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
+from core.auth import verify_api_key
 from core.database import get_db
 from schemas.schemas import AnalyzeResponse, ResourceSummary, GraphStats, AnomalySummary
 from models.models import CloudResource
@@ -21,7 +22,7 @@ logger = logging.getLogger("cloudiq.router.analyze")
 router = APIRouter(prefix="/api", tags=["Analyze"])
 
 
-@router.get("/analyze", response_model=AnalyzeResponse)
+@router.get("/analyze", response_model=AnalyzeResponse, dependencies=[Depends(verify_api_key)])
 def analyze(db: Session = Depends(get_db)):
     """
     Full cloud infrastructure analysis:

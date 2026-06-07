@@ -25,12 +25,12 @@ function writeStorage(key, value) {
   if (typeof window === 'undefined') return;
   try {
     window.localStorage.setItem(key, JSON.stringify(value));
-  } catch (e) {
+  } catch {
     if (Array.isArray(value)) {
       try {
         window.localStorage.setItem(key, JSON.stringify(value.slice(-6)));
       } catch {
-        // silently skip — non-critical
+        // Non-critical storage failure.
       }
     }
   }
@@ -152,6 +152,5 @@ export const useCloudStore = create((set, get) => ({
     return copy.statusIdle;
   },
 }));
-
 
 

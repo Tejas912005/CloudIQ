@@ -2,22 +2,21 @@ import { useEffect, useState, useRef, useCallback } from 'react';
 import ForceGraph2D from 'react-force-graph-2d';
 import { fetchJson } from '../lib/api';
 
-// ─── Color mapping by risk level ─────────────────────────────────────────────
-const RISK_COLORS = {
-  High:   { bg: '#ef4444', border: '#b91c1c', text: '#fff', glow: 'rgba(239,68,68,0.5)' },
-  Medium: { bg: '#f59e0b', border: '#b45309', text: '#000', glow: 'rgba(245,158,11,0.4)' },
-  Low:    { bg: '#22c55e', border: '#15803d', text: '#fff', glow: 'rgba(34,197,94,0.4)' },
-};
-
-const TYPE_ICONS = {
-  EC2: '🖥️',  RDS: '🗄️',  S3: '🪣',  Lambda: '⚡',  ALB: '⚖️',
-  VM: '💻',  GCE: '☁️',  SQS: '📬', CloudFront: '🌐', ElastiCache: '⚡',
-  BigQuery: '📊', Elasticsearch: '🔍', default: '📦',
-};
-
-function getNodeIcon(type) {
-  return TYPE_ICONS[type] || TYPE_ICONS.default;
+// ─── Color mapping by risk level — resolved from CSS variables at runtime ─────
+function getRiskColors() {
+  const s = typeof getComputedStyle !== 'undefined'
+    ? getComputedStyle(document.documentElement)
+    : null;
+  const danger  = s?.getPropertyValue('--danger').trim()  ?? '#ef4444';
+  const warning = s?.getPropertyValue('--warning').trim() ?? '#f59e0b';
+  const success = s?.getPropertyValue('--success').trim() ?? '#22c55e';
+  return {
+    High:   { bg: danger,   border: danger,   text: '#fff', glow: `${danger}80`  },
+    Medium: { bg: warning,  border: warning,  text: '#000', glow: `${warning}66` },
+    Low:    { bg: success,  border: success,  text: '#fff', glow: `${success}66` },
+  };
 }
+const RISK_COLORS = getRiskColors();
 
 export default function GraphView() {
   const [graphData, setGraphData]   = useState(null);
@@ -26,7 +25,7 @@ export default function GraphView() {
   const [selected, setSelected]     = useState(null);
   const [blastRadius, setBlastRadius] = useState(null);
   const [blastLoading, setBlastLoading] = useState(false);
-  const [dimensions, setDimensions] = useState({ width: 900, height: 600 });
+  const [dimensions, setDimensions] = useState({ width: 0, height: 0 });
   
   const containerRef = useRef(null);
   const fgRef = useRef();
@@ -87,45 +86,40 @@ export default function GraphView() {
   const isAffected = useCallback((nodeId) =>
     blastRadius?.affected_nodes?.some(n => n.id === nodeId), [blastRadius]);
 
-  const paintNode = useCallback((node, ctx, globalScale) => {
-    const riskColor = RISK_COLORS[node.risk_level] || RISK_COLORS.Low;
-    const isSelected = selected?.id === node.id;
-    const isAff = isAffected(node.id);
-    const r = 12;
+  const nodeCanvasObject = useCallback((node, ctx, globalScale) => {
+    const r = Math.sqrt((node.val || 1)) * 5 + 4;
+    const colors = RISK_COLORS[node.risk_level] || RISK_COLORS.Low;
 
-    // Glow for selected/affected
-    if (isSelected || isAff) {
-      ctx.beginPath();
-      ctx.arc(node.x, node.y, r + 4, 0, 2 * Math.PI, false);
-      ctx.fillStyle = isSelected ? 'rgba(168,85,247,0.3)' : 'rgba(245,158,11,0.3)';
-      ctx.fill();
+    // Glow for high-risk nodes
+    if (node.risk_level === 'High') {
+      ctx.shadowColor = colors.bg;
+      ctx.shadowBlur = 16;
     }
 
-    // Node Circle
+    // Draw circle
     ctx.beginPath();
-    ctx.arc(node.x, node.y, r, 0, 2 * Math.PI, false);
-    ctx.fillStyle = isAff ? '#a855f7' : riskColor.bg;
-    ctx.strokeStyle = isSelected ? '#a855f7' : riskColor.border;
-    ctx.lineWidth = isSelected ? 2 : 1;
+    ctx.arc(node.x, node.y, r, 0, 2 * Math.PI);
+    ctx.fillStyle = colors.bg;
     ctx.fill();
+
+    // Border ring
+    ctx.strokeStyle = colors.border;
+    ctx.lineWidth = 1.5;
     ctx.stroke();
 
-    // Icon (Text)
-    const fontSize = 10;
-    ctx.font = `${fontSize}px Sans-Serif`;
+    ctx.shadowBlur = 0;
+
+    // Node name label below circle
+    const fontSize = Math.max(9, 11 / globalScale);
+    ctx.font = `500 ${fontSize}px Inter, sans-serif`;
     ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillStyle = riskColor.text;
-    ctx.fillText(getNodeIcon(node.resource_type), node.x, node.y - 1);
-    
-    // Label below
-    if (globalScale > 1.2) {
-      const label = node.name.length > 14 ? node.name.slice(0, 13) + '…' : node.name;
-      ctx.font = `${6}px Sans-Serif`;
-      ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
-      ctx.fillText(label, node.x, node.y + r + 6);
-    }
-  }, [selected, isAffected]);
+    ctx.textBaseline = 'top';
+    ctx.fillStyle = 'rgba(241,245,249,0.85)';
+    const label =
+      node.name?.length > 14 ? node.name.slice(0, 13) + '…' : node.name || '';
+    ctx.fillText(label, node.x, node.y + r + 3);
+  }, []);
+
 
   if (loading) {
     return (
@@ -140,7 +134,7 @@ export default function GraphView() {
 
   if (error) {
     return (
-      <div className="flex items-center justify-center h-64" style={{ color: '#ef4444' }}>
+      <div className="flex items-center justify-center h-64" style={{ color: 'var(--danger)' }}>
         <p>❌ Failed to load graph: {error}</p>
       </div>
     );
@@ -217,7 +211,7 @@ export default function GraphView() {
               width={dimensions.width}
               height={dimensions.height}
               graphData={{ nodes: nodes, links: edges }}
-              nodeCanvasObject={paintNode}
+              nodeCanvasObject={nodeCanvasObject}
               nodePointerAreaPaint={(node, color, ctx) => {
                 ctx.fillStyle = color;
                 ctx.beginPath();
@@ -260,7 +254,6 @@ export default function GraphView() {
             <>
               <div>
                 <div className="flex items-center gap-2 mb-2">
-                  <span className="text-2xl">{getNodeIcon(selected.resource_type)}</span>
                   <div>
                     <p className="font-semibold text-sm" style={{ color: 'var(--text-base)' }}>
                       {selected.name}
@@ -329,7 +322,9 @@ export default function GraphView() {
                           className="flex items-center gap-1.5 rounded-lg px-2 py-1"
                           style={{ background: 'rgba(168,85,247,0.1)', border: '1px solid rgba(168,85,247,0.3)' }}
                         >
-                          <span className="text-xs">{getNodeIcon(n.resource_type)}</span>
+                          <span className="text-xs" style={{ color: 'var(--text-dim)' }}>
+                            {/* icon removed */}
+                          </span>
                           <span className="text-xs" style={{ color: 'var(--text-base)' }}>{n.name}</span>
                         </div>
                       ))}

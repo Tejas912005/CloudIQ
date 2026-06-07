@@ -5,6 +5,13 @@ import { fetchJson } from '../lib/api';
 import { LoadingState, ErrorState, EmptyState } from '../components/StatusPanel';
 import GlassPanel from '../components/shared/GlassPanel';
 
+// Read semantic colors from the design system CSS variables
+const CSS = typeof getComputedStyle !== 'undefined'
+  ? getComputedStyle(document.documentElement)
+  : null;
+const COLOR_DANGER  = CSS ? CSS.getPropertyValue('--danger').trim()  : '#ef4444';
+const COLOR_SUCCESS = CSS ? CSS.getPropertyValue('--success').trim() : '#22c55e';
+
 const REGION_COORDS = {
   'us-east-1': { lat: 39.0, lng: -77.5 },
   'us-west-2': { lat: 45.5, lng: -122.7 },
@@ -45,7 +52,7 @@ export default function Globe() {
         lat: coords.lat,
         lng: coords.lng,
         size: Math.max(0.1, r.count * 0.05),
-        color: r.risk > 10 ? '#ef4444' : '#22c55e',
+        color: r.risk > 10 ? COLOR_DANGER : COLOR_SUCCESS,
       };
     });
   }, [resources]);
@@ -105,7 +112,7 @@ export default function Globe() {
             arcColor="color"
             arcDashLength={0.4}
             arcDashGap={4}
-            arcDashInitialGap={() => Math.random() * 5}
+            arcDashInitialGap={(_arc, index) => (index * 1.618) % 5}
             arcDashAnimateTime={2000}
             backgroundColor="#060a14"
           />

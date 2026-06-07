@@ -11,6 +11,9 @@ import {
 } from 'recharts';
 import { fetchJson, getErrorMessage } from '../lib/api';
 import { formatCurrency, formatTrendLabel } from '../lib/formatters';
+import GlassPanel from '../components/shared/GlassPanel';
+import AnimatedNumber from '../components/shared/AnimatedNumber';
+import { StaggerParent, StaggerChild, FadeUp } from '../components/shared/Motion';
 import {
   LoadingState,
   ErrorState,
@@ -24,9 +27,9 @@ const CustomTooltip = ({ active, payload }) => {
     return (
       <div
         style={{
-          background: '#0a1628',
-          border: '1px solid rgba(99,178,255,0.2)',
-          borderRadius: 8,
+          background: 'var(--bg-tooltip)',
+          border: '1px solid rgba(99, 178, 255, 0.2)',
+          borderRadius: '8px',
           padding: '10px 14px',
         }}
       >
@@ -76,7 +79,7 @@ export default function Predictions() {
   }, []);
 
   if (loading) {
-    return <LoadingState message="Loading predictions..." />;
+    return <LoadingState message="Running cost forecast..." />;
   }
 
   if (error) {
@@ -116,73 +119,180 @@ export default function Predictions() {
     predicted: point.predicted,
   }));
 
-  return (
-    <div>
-      <div className="page-header fade-in">
-        <h1>AI Predictions</h1>
-        <p>30-day cost forecast using linear regression and resource failure risk scoring</p>
-      </div>
+  const sortedRisks = [...(resource_risks || [])].sort(
+    (a, b) => (b.risk_score || 0) - (a.risk_score || 0)
+  );
+  const topRisks = sortedRisks.slice(0, 3);
 
-      <div className="stats-grid" style={{ marginBottom: 24 }}>
+  const interpretation = (() => {
+    const trend = cost_predictions?.trend_direction;
+    if (trend === 'increasing')
+      return 'Costs are trending upward; the forecast indicates elevated spend into the next window.';
+    if (trend === 'decreasing')
+      return 'Costs are trending downward; forecast expects lower spend if current conditions persist.';
+    return 'Costs appear stable; forecast suggests limited movement with ongoing risk variance.';
+  })();
+
+  return (
+    <div className="mx-auto flex max-w-[1600px] flex-col gap-5">
+      {/* Page header */}
+      <FadeUp>
+        <div>
+          <h2
+            style={{
+              fontSize: 20,
+              fontWeight: 700,
+              color: 'var(--text-base)',
+              fontFamily: 'Space Grotesk, sans-serif',
+            }}
+          >
+            AI Predictions
+          </h2>
+          <p
+            style={{
+              fontSize: 13,
+              color: 'var(--text-muted)',
+              marginTop: 4,
+            }}
+          >
+            30-day cost forecast using linear regression and resource failure risk scoring
+          </p>
+        </div>
+      </FadeUp>
+
+      {/* 4 metric cards in a row */}
+      <StaggerParent className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         {[
           {
             label: '30-Day Forecast',
-            value: formatCurrency(cost_predictions.monthly_forecast, {
+            rawValue: cost_predictions.monthly_forecast || 0,
+            display: formatCurrency(cost_predictions.monthly_forecast || 0, {
               minimumFractionDigits: 0,
               maximumFractionDigits: 0,
             }),
-            color: '#3b82f6',
+
+            accentColor: 'var(--data)',
+            isCurrency: true,
           },
           {
             label: 'Cost Trend',
-            value: formatTrendLabel(cost_predictions.trend_direction),
-            color:
+            display: formatTrendLabel(cost_predictions.trend_direction),
+            accentColor:
               cost_predictions.trend_direction === 'increasing'
-                ? '#ef4444'
-                : '#10b981',
+                ? 'var(--danger)'
+                : 'var(--success)',
+            isCurrency: false,
           },
           {
             label: 'Daily Slope',
-            value: `${formatCurrency(cost_predictions.trend_slope)}/day`,
-            color: '#f59e0b',
+            display: `${formatCurrency(cost_predictions.trend_slope || 0)}/day`,
+            accentColor: 'var(--warning)',
+            isCurrency: false,
           },
           {
             label: 'At-Risk Resources',
-            value: resource_risks?.length || 0,
-            color: '#ef4444',
+            rawValue: resource_risks?.length || 0,
+            display: String(resource_risks?.length || 0),
+            accentColor: 'var(--danger)',
+            isCurrency: false,
           },
         ].map((stat) => (
+          <StaggerChild key={stat.label}>
+            <GlassPanel
+              className="card-lift p-5"
+              style={{ position: 'relative', overflow: 'hidden' }}
+            >
+              {/* Colored accent line at bottom */}
+              <div
+                style={{
+                  position: 'absolute',
+                  bottom: 0,
+                  left: 0,
+                  right: 0,
+                  height: 2,
+                  background: stat.accentColor,
+                  borderRadius: '0 0 14px 14px',
+                }}
+              />
+              <p
+                style={{
+                  fontSize: 10,
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.12em',
+                  color: 'var(--text-dim)',
+                  marginBottom: 12,
+                }}
+              >
+                {stat.label}
+              </p>
+              {stat.isCurrency && stat.rawValue !== undefined ? (
+                <p
+                  style={{
+                    fontSize: 28,
+                    fontWeight: 700,
+                    color: stat.accentColor,
+                    fontFamily: 'Space Grotesk, sans-serif',
+                  }}
+                >
+                  $<AnimatedNumber value={stat.rawValue} />
+                </p>
+              ) : (
+                <p
+                  style={{
+                    fontSize: stat.display.length > 8 ? 20 : 28,
+                    fontWeight: 700,
+                    color: stat.accentColor,
+                    fontFamily: 'Space Grotesk, sans-serif',
+                  }}
+                >
+                  {stat.display}
+                </p>
+              )}
+            </GlassPanel>
+          </StaggerChild>
+        ))}
+      </StaggerParent>
+
+      {/* Historical chart */}
+      <FadeUp delay={0.15}>
+        <GlassPanel className="p-5">
           <div
-            key={stat.label}
-            className="stat-card fade-in"
-            style={{ paddingTop: 18, paddingBottom: 18 }}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              marginBottom: 16,
+            }}
           >
-            <div
-              className="card-value"
+            <h3
               style={{
-                color: stat.color,
-                fontSize: stat.value.toString().length > 8 ? 20 : 26,
+                fontSize: 14,
+                fontWeight: 600,
+                color: 'var(--text-base)',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 8,
               }}
             >
-              {stat.value}
+              <TrendingUp size={15} style={{ color: 'var(--accent)' }} />
+              90-Day History + 30-Day Forecast
+            </h3>
+            <div style={{ display: 'flex', gap: 16, fontSize: 11 }}>
+              <span style={{ color: '#3b82f6' }}>● Actual</span>
+              <span style={{ color: '#8b5cf6' }}>● Fitted</span>
+              <span style={{ color: 'var(--success)' }}>● Forecast</span>
             </div>
-            <div className="card-label">{stat.label}</div>
           </div>
-        ))}
-      </div>
 
-      <div className="glass-card fade-in" style={{ marginBottom: 16 }}>
-        <div className="card-title">
-          <TrendingUp size={16} /> 90-Day History + 30-Day Forecast
-          <span style={{ marginLeft: 'auto', fontSize: 11, color: '#64748b', fontWeight: 400 }}>
-            <span style={{ color: '#3b82f6', marginRight: 12 }}>Actual</span>
-            <span style={{ color: '#8b5cf6', marginRight: 12 }}>Fitted</span>
-            <span style={{ color: '#10b981' }}>Forecast</span>
-          </span>
-        </div>
-
-        <div style={{ marginBottom: 16 }}>
-          <p style={{ color: '#64748b', fontSize: 12 }}>Historical Data (sampled)</p>
+          <p
+            style={{
+              fontSize: 11,
+              color: 'var(--text-dim)',
+              marginBottom: 8,
+            }}
+          >
+            Historical Data (sampled)
+          </p>
           <ResponsiveContainer width="100%" height={220}>
             <LineChart data={historicalChart} margin={{ top: 5, right: 10, left: -10, bottom: 5 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="rgba(99,178,255,0.06)" />
@@ -219,10 +329,17 @@ export default function Predictions() {
               />
             </LineChart>
           </ResponsiveContainer>
-        </div>
 
-        <div>
-          <p style={{ color: '#64748b', fontSize: 12 }}>30-Day Forecast</p>
+          <p
+            style={{
+              fontSize: 11,
+              color: 'var(--text-dim)',
+              marginTop: 20,
+              marginBottom: 8,
+            }}
+          >
+            30-Day Forecast
+          </p>
           <ResponsiveContainer width="100%" height={180}>
             <LineChart data={forecastChart} margin={{ top: 5, right: 10, left: -10, bottom: 5 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="rgba(99,178,255,0.06)" />
@@ -251,55 +368,129 @@ export default function Predictions() {
               />
             </LineChart>
           </ResponsiveContainer>
-        </div>
-      </div>
+        </GlassPanel>
+      </FadeUp>
 
-      <div className="glass-card fade-in">
-        <div className="card-title">
-          <AlertCircle size={16} style={{ color: '#f59e0b' }} /> Resource Failure
-          Risk Assessment
-        </div>
-        {resource_risks?.length > 0 ? (
-          <div className="risk-list">
-            {resource_risks.map((risk, index) => (
-              <div key={index} className="risk-item">
-                <div style={{ minWidth: 160 }}>
-                  <div className="risk-name">{risk.name}</div>
-                  <div className="risk-type">{risk.type}</div>
-                </div>
-                <div className="risk-score-bar">
-                  <div className="progress-bar">
-                    <div
-                      className="progress-fill"
+      {/* Resource risk table */}
+      <FadeUp delay={0.22}>
+        <GlassPanel className="p-5">
+          <h3
+            style={{
+              fontSize: 14,
+              fontWeight: 600,
+              color: 'var(--text-base)',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 8,
+              marginBottom: 16,
+            }}
+          >
+            <AlertCircle size={15} style={{ color: 'var(--warning)' }} />
+            Resource Failure Risk Assessment
+          </h3>
+
+          {resource_risks?.length > 0 ? (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              {resource_risks.map((risk, index) => (
+                <div
+                  key={index}
+                  style={{
+                    display: 'grid',
+                    gridTemplateColumns: '160px 1fr 110px',
+                    gap: 16,
+                    alignItems: 'center',
+                    padding: '12px 14px',
+                    borderRadius: 10,
+                    background: 'var(--surface)',
+                    border: '1px solid var(--border)',
+                  }}
+                >
+                  {/* Name */}
+                  <div>
+                    <p
                       style={{
-                        width: `${risk.risk_score}%`,
+                        fontSize: 13,
+                        fontWeight: 600,
+                        color: 'var(--text-base)',
+                      }}
+                    >
+                      {risk.name}
+                    </p>
+                    <p style={{ fontSize: 11, color: 'var(--text-dim)' }}>{risk.type}</p>
+                  </div>
+
+                  {/* Progress bar */}
+                  <div>
+                    <div
+                      style={{
+                        height: 6,
+                        borderRadius: 3,
+                        background: 'var(--surface-2)',
+                        overflow: 'hidden',
+                        marginBottom: 6,
+                      }}
+                    >
+                      <div
+                        style={{
+                          height: '100%',
+                          width: `${Math.min(risk.risk_score, 100)}%`,
+                          borderRadius: 3,
+                          background:
+                            risk.risk_level === 'High'
+                              ? 'var(--danger)'
+                              : risk.risk_level === 'Medium'
+                                ? 'var(--warning)'
+                                : 'var(--success)',
+                          transition: 'width 600ms ease-out',
+                        }}
+                      />
+                    </div>
+                    <p style={{ fontSize: 11, color: 'var(--text-dim)' }}>
+                      {risk.reasons?.join(', ')}
+                    </p>
+                  </div>
+
+                  {/* Badge */}
+                  <div style={{ textAlign: 'right' }}>
+                    <span
+                      style={{
+                        display: 'inline-block',
+                        padding: '3px 10px',
+                        borderRadius: 999,
+                        fontSize: 11,
+                        fontWeight: 600,
                         background:
                           risk.risk_level === 'High'
-                            ? '#ef4444'
+                            ? 'rgba(248,113,113,0.12)'
                             : risk.risk_level === 'Medium'
-                              ? '#f59e0b'
-                              : '#10b981',
+                              ? 'rgba(251,191,36,0.12)'
+                              : 'rgba(52,211,153,0.12)',
+                        color:
+                          risk.risk_level === 'High'
+                            ? 'var(--danger)'
+                            : risk.risk_level === 'Medium'
+                              ? 'var(--warning)'
+                              : 'var(--success)',
+                        border: `1px solid ${
+                          risk.risk_level === 'High'
+                            ? 'rgba(248,113,113,0.25)'
+                            : risk.risk_level === 'Medium'
+                              ? 'rgba(251,191,36,0.25)'
+                              : 'rgba(52,211,153,0.25)'
+                        }`,
                       }}
-                    />
-                  </div>
-                  <div style={{ fontSize: 11, color: '#64748b', marginTop: 4 }}>
-                    {risk.reasons.join(', ')}
+                    >
+                      {risk.risk_level} ({risk.risk_score})
+                    </span>
                   </div>
                 </div>
-                <div style={{ minWidth: 100, textAlign: 'right' }}>
-                  <span className={`badge badge-${risk.risk_level.toLowerCase()}`}>
-                    {risk.risk_level} Risk ({risk.risk_score})
-                  </span>
-                </div>
-              </div>
-            ))}
-          </div>
-        ) : (
-          <p style={{ color: '#64748b', fontSize: 13 }}>
-            No high-risk resources detected.
-          </p>
-        )}
-      </div>
+              ))}
+            </div>
+          ) : (
+            <p style={{ fontSize: 13, color: 'var(--text-muted)' }}>No high-risk resources detected.</p>
+          )}
+        </GlassPanel>
+      </FadeUp>
     </div>
   );
 }

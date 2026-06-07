@@ -18,7 +18,6 @@ from sqlalchemy.orm import Session
 
 from models.models import ChatLog
 from local_fallback import infer_intent_from_keywords
-from services.gemini_service import generate_response
 
 logger = logging.getLogger("cloudiq.agents.chat_controller")
 
@@ -137,7 +136,7 @@ def _run_agent_loop(goal: str, db: Session) -> dict:
         return _get_context_data("agent_mode", db)
     
     while iteration < max_iterations:
-        results = execute_plan(plan)
+        results = execute_plan(plan, db)
         all_results.update(results)
         
         reflection = reflect_on_results(goal, all_results)
@@ -175,15 +174,9 @@ def chat(message: str, db: Session) -> dict:
     if not message or not message.strip():
         return {"response": "Message cannot be empty", "intent": "error", "status": "error", "mode": "error"}
 
-    # Step 1: Fast keyword intent (no API call)
-    from local_fallback import infer_intent_from_keywords
-    intent = infer_intent_from_keywords(message)
-
-    # Step 2: Override to agent_mode for complex queries
-    agent_keywords = ["what if", "simulate", "optimize", "summary", "overview",
-                      "reduce", "improve", "audit", "find issues", "analyze all"]
-    if any(kw in message.lower() for kw in agent_keywords):
-        intent = "agent_mode"
+    # Step 1: Fast keyword intent using canonical intent resolver
+    from core.intent_utils import resolve_intent
+    intent = resolve_intent(message)
 
     logger.info(f"[CHAT_CTRL] message='{message[:60]}...' intent={intent}")
 

@@ -192,19 +192,28 @@ def generate_recommendations(db: Session) -> Dict:
         -x["estimated_savings"]
     ))
 
-    # Persist to DB — clear old, insert new
+    # Persist to DB — clear old, bulk insert new
     db.query(Recommendation).delete()
-    for rec in all_recs:
-        db.add(Recommendation(
-            resource_id=rec.get("resource_id"),
-            resource_name=rec["resource_name"],
-            resource_type=rec.get("resource_type"),
-            action=rec["action"],
-            reason=rec["reason"],
-            priority=rec["priority"],
-            category=rec["category"],
-            estimated_savings=rec["estimated_savings"],
-        ))
+    if all_recs:
+        db.bulk_insert_mappings(
+            Recommendation,
+            [
+                dict(
+                    resource_id=db.query(CloudResource)
+                                   .filter(CloudResource.name == rec["resource_name"])
+                                   .with_entities(CloudResource.id)
+                                   .scalar(),
+                    resource_name=rec["resource_name"],
+                    resource_type=rec.get("resource_type"),
+                    action=rec["action"],
+                    reason=rec["reason"],
+                    priority=rec["priority"],
+                    category=rec.get("category", "cost"),
+                    estimated_savings=rec.get("estimated_savings", 0.0),
+                )
+                for rec in all_recs
+            ]
+        )
 
     try:
         db.commit()

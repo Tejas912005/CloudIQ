@@ -6,6 +6,8 @@ export async function fetchJson(path, options = {}) {
     ...options,
     headers: {
       Accept: 'application/json',
+      'Content-Type': 'application/json',
+      'X-API-Key': import.meta.env.VITE_API_KEY,
       ...(options.headers || {}),
     },
   });

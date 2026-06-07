@@ -1,29 +1,41 @@
-# CloudIQ v9 Backend Dependencies
-# Install: pip install -r requirements.txt
+# CloudIQ Backend Dependencies
+# Install: pip install -r requirements.txt --break-system-packages
 
-# ── Web Framework ─────────────────────
+# ── Web Framework ─────────────────────────────────────────────────
 fastapi>=0.111.0
 uvicorn[standard]>=0.29.0
 
-# ── Database ──────────────────────────
+# ── Database ──────────────────────────────────────────────────────
 sqlalchemy>=2.0.0
-psycopg2-binary>=2.9.0
 pg8000>=1.31.0
+# NOTE: psycopg2-binary removed — project uses pg8000 driver exclusively.
+# psycopg2-binary was installed but never imported anywhere.
 
-# ── Data / ML ─────────────────────────
+# ── Data / ML ─────────────────────────────────────────────────────
 numpy>=1.26.0
 scikit-learn>=1.4.0
 pandas>=2.2.0
 scipy>=1.13.0
 
-# ── Graph Engine ──────────────────────
+# ── Graph Engine ──────────────────────────────────────────────────
 networkx>=3.3
 
-# ── AI / Gemini ───────────────────────
-google-genai
+# ── AI / Gemini ───────────────────────────────────────────────────
+google-genai>=0.7.0
 
-# ── RAG Memory ────────────────────────
+# ── RAG Memory ────────────────────────────────────────────────────
 chromadb>=0.5.0
 
-# ── Utilities ─────────────────────────
+# ── Export Features (newly activated) ────────────────────────────
+reportlab>=4.2.0     # PDF generation — pure Python, zero C deps
+openpyxl>=3.1.0      # Excel XLSX generation — pure Python
+
+# ── File Upload Extraction (newly activated) ──────────────────────
+pypdf>=4.3.0         # PDF text extraction — pure Python
+python-docx>=1.1.0   # Word document text extraction
+
+# ── Utilities ─────────────────────────────────────────────────────
 python-multipart>=0.0.9
+
+# ── Testing ───────────────────────────────────────────────────────
+pytest>=8.0.0

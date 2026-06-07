@@ -1,0 +1,569 @@
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+CLOUDIQ — PAGE STRUCTURE FIX PROMPT
+Fix Predictions, Resources, Insights, GraphView pages
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+You are fixing 4 pages in CloudIQ that use old CSS classes that no longer
+exist in the new design system, causing them to render as unstyled plain text.
+
+The new design system uses:
+  GlassPanel component (from ../components/shared/GlassPanel)
+  CSS variables: --accent, --text-base, --text-muted, --text-dim,
+                 --border, --surface, --bg-card, --success, --warning,
+                 --danger, --data
+  AnimatedNumber (from ../components/shared/AnimatedNumber)
+  Tailwind for layout only (flex, grid, gap, padding)
+  NO hardcoded hex colors in JSX — use CSS variables only
+
+OLD classes that NO LONGER EXIST (replace all of these):
+  stat-card, glass-card, card-value, card-label,
+  stats-grid, page-header, filter-row, risk-list,
+  risk-item, risk-name, risk-type, risk-score-bar,
+  progress-bar, progress-fill, badge, badge-high,
+  badge-medium, badge-low, card-title
+
+Read all attached files completely. Show complete file after each change.
+Wait for "next" before proceeding.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+CHANGE 1 — Predictions.jsx (complete rewrite of JSX structure only)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Keep ALL data fetching logic, useEffect, useState, loadPredictions,
+data parsing (cost_predictions, resource_risks, historicalChart,
+forecastChart), and the CustomTooltip component unchanged.
+
+Only rewrite the return() JSX.
+
+ADD these imports if not present:
+  import GlassPanel from '../components/shared/GlassPanel';
+  import AnimatedNumber from '../components/shared/AnimatedNumber';
+  import { StaggerParent, StaggerChild, FadeUp } from '../components/shared/Motion';
+
+NEW return() JSX structure:
+
+<div className="mx-auto flex max-w-[1600px] flex-col gap-5">
+
+  {/* Page header */}
+  <FadeUp>
+    <div>
+      <h2 style={{ fontSize: 20, fontWeight: 700, color: 'var(--text-base)',
+                   fontFamily: 'Space Grotesk, sans-serif' }}>
+        AI Predictions
+      </h2>
+      <p style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 4 }}>
+        30-day cost forecast using linear regression and resource failure risk scoring
+      </p>
+    </div>
+  </FadeUp>
+
+  {/* 4 metric cards in a row */}
+  <StaggerParent className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+    {[
+      {
+        label: '30-Day Forecast',
+        rawValue: cost_predictions.monthly_forecast || 0,
+        display: formatCurrency(cost_predictions.monthly_forecast || 0, { maximumFractionDigits: 0 }),
+        accentColor: 'var(--data)',
+        isCurrency: true,
+      },
+      {
+        label: 'Cost Trend',
+        display: formatTrendLabel(cost_predictions.trend_direction),
+        accentColor: cost_predictions.trend_direction === 'increasing'
+          ? 'var(--danger)' : 'var(--success)',
+        isCurrency: false,
+      },
+      {
+        label: 'Daily Slope',
+        display: `${formatCurrency(cost_predictions.trend_slope || 0)}/day`,
+        accentColor: 'var(--warning)',
+        isCurrency: false,
+      },
+      {
+        label: 'At-Risk Resources',
+        rawValue: resource_risks?.length || 0,
+        display: String(resource_risks?.length || 0),
+        accentColor: 'var(--danger)',
+        isCurrency: false,
+      },
+    ].map((stat) => (
+      <StaggerChild key={stat.label}>
+        <GlassPanel className="card-lift p-5" style={{ position: 'relative', overflow: 'hidden' }}>
+          {/* Colored accent line at bottom */}
+          <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, height: 2,
+                        background: stat.accentColor, borderRadius: '0 0 14px 14px' }} />
+          <p style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.12em',
+                      color: 'var(--text-dim)', marginBottom: 12 }}>
+            {stat.label}
+          </p>
+          {stat.isCurrency && stat.rawValue !== undefined ? (
+            <p style={{ fontSize: 28, fontWeight: 700, color: stat.accentColor,
+                        fontFamily: 'Space Grotesk, sans-serif' }}>
+              $<AnimatedNumber value={stat.rawValue} />
+            </p>
+          ) : (
+            <p style={{ fontSize: stat.display.length > 8 ? 20 : 28, fontWeight: 700,
+                        color: stat.accentColor, fontFamily: 'Space Grotesk, sans-serif' }}>
+              {stat.display}
+            </p>
+          )}
+        </GlassPanel>
+      </StaggerChild>
+    ))}
+  </StaggerParent>
+
+  {/* Historical chart */}
+  <FadeUp delay={0.15}>
+    <GlassPanel className="p-5">
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                    marginBottom: 16 }}>
+        <h3 style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-base)',
+                     display: 'flex', alignItems: 'center', gap: 8 }}>
+          <TrendingUp size={15} style={{ color: 'var(--accent)' }} />
+          90-Day History + 30-Day Forecast
+        </h3>
+        <div style={{ display: 'flex', gap: 16, fontSize: 11 }}>
+          <span style={{ color: '#3b82f6' }}>● Actual</span>
+          <span style={{ color: '#8b5cf6' }}>● Fitted</span>
+          <span style={{ color: 'var(--success)' }}>● Forecast</span>
+        </div>
+      </div>
+
+      <p style={{ fontSize: 11, color: 'var(--text-dim)', marginBottom: 8 }}>
+        Historical Data (sampled)
+      </p>
+      <ResponsiveContainer width="100%" height={220}>
+        <LineChart data={historicalChart} margin={{ top: 5, right: 10, left: -10, bottom: 5 }}>
+          {/* keep existing chart content unchanged */}
+        </LineChart>
+      </ResponsiveContainer>
+
+      <p style={{ fontSize: 11, color: 'var(--text-dim)', marginTop: 20, marginBottom: 8 }}>
+        30-Day Forecast
+      </p>
+      <ResponsiveContainer width="100%" height={180}>
+        <LineChart data={forecastChart} margin={{ top: 5, right: 10, left: -10, bottom: 5 }}>
+          {/* keep existing chart content unchanged */}
+        </LineChart>
+      </ResponsiveContainer>
+    </GlassPanel>
+  </FadeUp>
+
+  {/* Resource risk table */}
+  <FadeUp delay={0.22}>
+    <GlassPanel className="p-5">
+      <h3 style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-base)',
+                   display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
+        <AlertCircle size={15} style={{ color: 'var(--warning)' }} />
+        Resource Failure Risk Assessment
+      </h3>
+
+      {resource_risks?.length > 0 ? (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          {resource_risks.map((risk, index) => (
+            <div key={index} style={{
+              display: 'grid', gridTemplateColumns: '160px 1fr 110px',
+              gap: 16, alignItems: 'center',
+              padding: '12px 14px', borderRadius: 10,
+              background: 'var(--surface)', border: '1px solid var(--border)',
+            }}>
+              {/* Name */}
+              <div>
+                <p style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-base)' }}>
+                  {risk.name}
+                </p>
+                <p style={{ fontSize: 11, color: 'var(--text-dim)' }}>{risk.type}</p>
+              </div>
+
+              {/* Progress bar */}
+              <div>
+                <div style={{ height: 6, borderRadius: 3, background: 'var(--surface-2)',
+                              overflow: 'hidden', marginBottom: 6 }}>
+                  <div style={{
+                    height: '100%',
+                    width: `${Math.min(risk.risk_score, 100)}%`,
+                    borderRadius: 3,
+                    background: risk.risk_level === 'High' ? 'var(--danger)'
+                              : risk.risk_level === 'Medium' ? 'var(--warning)'
+                              : 'var(--success)',
+                    transition: 'width 600ms ease-out',
+                  }} />
+                </div>
+                <p style={{ fontSize: 11, color: 'var(--text-dim)' }}>
+                  {risk.reasons?.join(', ')}
+                </p>
+              </div>
+
+              {/* Badge */}
+              <div style={{ textAlign: 'right' }}>
+                <span style={{
+                  display: 'inline-block',
+                  padding: '3px 10px', borderRadius: 999,
+                  fontSize: 11, fontWeight: 600,
+                  background: risk.risk_level === 'High' ? 'rgba(248,113,113,0.12)'
+                            : risk.risk_level === 'Medium' ? 'rgba(251,191,36,0.12)'
+                            : 'rgba(52,211,153,0.12)',
+                  color: risk.risk_level === 'High' ? 'var(--danger)'
+                       : risk.risk_level === 'Medium' ? 'var(--warning)'
+                       : 'var(--success)',
+                  border: `1px solid ${
+                    risk.risk_level === 'High' ? 'rgba(248,113,113,0.25)'
+                    : risk.risk_level === 'Medium' ? 'rgba(251,191,36,0.25)'
+                    : 'rgba(52,211,153,0.25)'
+                  }`,
+                }}>
+                  {risk.risk_level} ({risk.risk_score})
+                </span>
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <p style={{ fontSize: 13, color: 'var(--text-muted)' }}>
+          No high-risk resources detected.
+        </p>
+      )}
+    </GlassPanel>
+  </FadeUp>
+</div>
+
+IMPORTANT: Keep all LineChart, XAxis, YAxis, CartesianGrid, Tooltip, Line
+content inside the charts EXACTLY as they are. Only replace the outer
+container divs.
+
+Show complete Predictions.jsx. Await "next".
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+CHANGE 2 — Resources.jsx (rewrite JSX structure only)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Keep ALL data fetching, filtering, search logic unchanged.
+
+ADD imports if missing:
+  import GlassPanel from '../components/shared/GlassPanel';
+  import AnimatedNumber from '../components/shared/AnimatedNumber';
+  import { StaggerParent, StaggerChild, FadeUp } from '../components/shared/Motion';
+
+NEW return() JSX structure:
+
+<div className="mx-auto flex max-w-[1600px] flex-col gap-5">
+
+  {/* Page header */}
+  <FadeUp>
+    <div>
+      <h2 style={{ fontSize: 20, fontWeight: 700, color: 'var(--text-base)',
+                   fontFamily: 'Space Grotesk, sans-serif' }}>
+        Cloud Resources
+      </h2>
+      <p style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 4 }}>
+        Monitor all {resources.length} simulated cloud instances and identify
+        idle or over-utilized resources
+      </p>
+    </div>
+  </FadeUp>
+
+  {/* 4 stat cards */}
+  <StaggerParent className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+    {[
+      { label: 'Total Resources',      count: resources.length,
+        color: 'var(--data)',    accent: 'var(--data)' },
+      { label: 'Idle Resources',
+        count: resources.filter(r => r.status === 'Idle').length,
+        color: 'var(--warning)', accent: 'var(--warning)' },
+      { label: 'Healthy Resources',
+        count: resources.filter(r => r.status === 'Healthy').length,
+        color: 'var(--success)', accent: 'var(--success)' },
+      { label: 'Over-Utilized',
+        count: resources.filter(r => r.status === 'Over-Utilized').length,
+        color: 'var(--danger)',  accent: 'var(--danger)' },
+    ].map((stat) => (
+      <StaggerChild key={stat.label}>
+        <GlassPanel className="card-lift p-5" style={{ position: 'relative', overflow: 'hidden' }}>
+          <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, height: 2,
+                        background: stat.accent, borderRadius: '0 0 14px 14px' }} />
+          <p style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.12em',
+                      color: 'var(--text-dim)', marginBottom: 12 }}>
+            {stat.label}
+          </p>
+          <p style={{ fontSize: 32, fontWeight: 700, color: stat.color,
+                      fontFamily: 'Space Grotesk, sans-serif' }}>
+            <AnimatedNumber value={stat.count} />
+          </p>
+        </GlassPanel>
+      </StaggerChild>
+    ))}
+  </StaggerParent>
+
+  {/* Filter row + search — horizontal flex, gap 12px */}
+  <FadeUp delay={0.12}>
+    <div style={{ display: 'flex', justifyContent: 'space-between',
+                  alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
+
+      {/* Status filter pills — IMPORTANT: gap: 8px between each button */}
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+        {STATUS_FILTERS.map((status) => (
+          <button
+            key={status}
+            onClick={() => setFilter(status)}
+            style={{
+              padding: '6px 14px', borderRadius: 999,
+              fontSize: 12, fontWeight: 600, cursor: 'pointer',
+              border: `1px solid ${filter === status ? 'var(--accent-border)' : 'var(--border)'}`,
+              background: filter === status ? 'var(--accent-soft)' : 'var(--surface)',
+              color: filter === status ? 'var(--accent)' : 'var(--text-muted)',
+              transition: 'all 150ms ease',
+            }}
+          >
+            {status}
+          </button>
+        ))}
+      </div>
+
+      {/* Search input */}
+      <div style={{ position: 'relative' }}>
+        <Search size={13} style={{ position: 'absolute', left: 10, top: '50%',
+                                    transform: 'translateY(-50%)',
+                                    color: 'var(--text-dim)', pointerEvents: 'none' }} />
+        <input
+          type="text"
+          placeholder="Search resources..."
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          style={{
+            paddingLeft: 30, paddingRight: 14, paddingTop: 8, paddingBottom: 8,
+            borderRadius: 10, background: 'var(--surface)', border: '1px solid var(--border)',
+            color: 'var(--text-base)', fontSize: 13, outline: 'none', minWidth: 200,
+          }}
+        />
+      </div>
+    </div>
+  </FadeUp>
+
+  {/* Table */}
+  <FadeUp delay={0.18}>
+    <GlassPanel className="overflow-hidden" style={{ padding: 0 }}>
+      <div style={{ padding: '14px 20px', borderBottom: '1px solid var(--border)',
+                    display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <p style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-base)' }}>
+          Resources ({filtered.length})
+        </p>
+      </div>
+
+      <div style={{ overflowX: 'auto' }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+          <thead>
+            <tr style={{ borderBottom: '1px solid var(--border)',
+                         background: 'var(--bg-elevated)' }}>
+              {['Name', 'Type', 'Region', 'CPU %', 'Memory %', 'Uptime (h)',
+                'Hourly Cost', 'Monthly Cost', 'Efficiency', 'Status'].map((col) => (
+                <th key={col} style={{ padding: '10px 16px', textAlign: 'left',
+                                       fontSize: 10, textTransform: 'uppercase',
+                                       letterSpacing: '0.10em', color: 'var(--text-dim)',
+                                       fontWeight: 600, whiteSpace: 'nowrap' }}>
+                  {col}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {filtered.map((resource, idx) => (
+              <tr key={resource.id || idx}
+                  style={{ borderBottom: '1px solid var(--border)',
+                            transition: 'background 100ms' }}
+                  onMouseEnter={e => e.currentTarget.style.background = 'var(--surface)'}
+                  onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+              >
+                <td style={{ padding: '12px 16px', color: 'var(--accent)',
+                              fontWeight: 600, whiteSpace: 'nowrap' }}>
+                  {resource.name}
+                </td>
+                <td style={{ padding: '12px 16px' }}>
+                  <span style={{ padding: '2px 8px', borderRadius: 6,
+                                  background: 'var(--surface-2)',
+                                  border: '1px solid var(--border)',
+                                  fontSize: 11, color: 'var(--text-muted)' }}>
+                    {resource.type || resource.resource_type}
+                  </span>
+                </td>
+                <td style={{ padding: '12px 16px', color: 'var(--text-muted)',
+                              fontSize: 12 }}>
+                  {resource.region}
+                </td>
+                <td style={{ padding: '12px 16px', fontFamily: 'var(--font-mono)',
+                              color: (resource.cpu_usage || 0) > 80 ? 'var(--danger)'
+                                   : (resource.cpu_usage || 0) > 50 ? 'var(--warning)'
+                                   : 'var(--text-base)' }}>
+                  {(resource.cpu_usage || 0).toFixed(1)}%
+                </td>
+                <td style={{ padding: '12px 16px', fontFamily: 'var(--font-mono)',
+                              color: (resource.memory_usage || 0) > 85 ? 'var(--danger)'
+                                   : 'var(--text-base)' }}>
+                  {(resource.memory_usage || 0).toFixed(1)}%
+                </td>
+                <td style={{ padding: '12px 16px', color: 'var(--text-muted)',
+                              fontFamily: 'var(--font-mono)' }}>
+                  {resource.uptime_hours || 0}h
+                </td>
+                <td style={{ padding: '12px 16px', color: 'var(--text-muted)',
+                              fontFamily: 'var(--font-mono)' }}>
+                  ${(resource.hourly_cost || 0).toFixed(4)}
+                </td>
+                <td style={{ padding: '12px 16px', fontWeight: 700,
+                              color: 'var(--text-base)', fontFamily: 'var(--font-mono)' }}>
+                  ${(resource.monthly_cost || 0).toFixed(2)}
+                </td>
+                <td style={{ padding: '12px 16px', color: 'var(--text-muted)',
+                              fontFamily: 'var(--font-mono)' }}>
+                  {(resource.efficiency_score || 0).toFixed(1)}
+                </td>
+                <td style={{ padding: '12px 16px' }}>
+                  <span style={{
+                    padding: '3px 10px', borderRadius: 999, fontSize: 11, fontWeight: 600,
+                    background: resource.status === 'Healthy' ? 'rgba(52,211,153,0.10)'
+                              : resource.status === 'Idle' ? 'rgba(251,191,36,0.10)'
+                              : 'rgba(248,113,113,0.10)',
+                    color: resource.status === 'Healthy' ? 'var(--success)'
+                         : resource.status === 'Idle' ? 'var(--warning)'
+                         : 'var(--danger)',
+                    border: `1px solid ${
+                      resource.status === 'Healthy' ? 'rgba(52,211,153,0.25)'
+                      : resource.status === 'Idle' ? 'rgba(251,191,36,0.25)'
+                      : 'rgba(248,113,113,0.25)'
+                    }`,
+                  }}>
+                    {resource.status}
+                  </span>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </GlassPanel>
+  </FadeUp>
+</div>
+
+Show complete Resources.jsx. Await "next".
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+CHANGE 3 — Insights.jsx (fix colors only — keep all structure)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Read the current Insights.jsx. Make ONLY these targeted changes:
+
+CHANGE A — Fix STATUS_COLORS (line 12):
+  FROM: const STATUS_COLORS = ['#c9a84c', '#6b7280', '#9ca3af'];
+  TO:   const STATUS_COLORS = ['#a78bfa', '#22d3ee', '#34d399'];
+  (Healthy=violet, Idle=cyan, Over-Utilized=emerald — matches new palette)
+
+CHANGE B — Fix the AreaChart gradient (lines 127-128):
+  FROM: stopColor="#c9a84c"
+  TO:   stopColor="var(--data)"  (cyan)
+  Change BOTH stop offset="0%" and offset="100%" stopColor values.
+
+CHANGE C — Fix the Area stroke color (line 135):
+  FROM: stroke="#c9a84c"
+  TO:   stroke="var(--data)"
+
+CHANGE D — Fix the Bar Cell colors (line 177):
+  FROM: fill={['#c9a84c', '#9ca3af', '#6b7280', '#ef4444'][index]}
+  TO:   fill={['var(--success)', 'var(--data)', 'var(--warning)', 'var(--danger)'][index]}
+
+CHANGE E — Fix the Insights summary stat color (line 70 area):
+  Find where color: '#c9a84c' appears in the stats/header area
+  Change all instances to: color: 'var(--data)'
+
+CHANGE F — Fix TOOLTIP_STYLE to use CSS variables:
+  FROM:
+    background: 'rgba(18,18,18,0.95)',
+    border: '1px solid rgba(255,255,255,0.08)',
+    color: '#e5e5e5',
+  TO:
+    background: 'var(--bg-mid)',
+    border: '1px solid var(--border)',
+    color: 'var(--text-base)',
+
+Do NOT change any chart structure, data keys, or component hierarchy.
+Show complete Insights.jsx. Await "next".
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+CHANGE 4 — GraphView.jsx (remove emoji labels from nodes)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Read the current GraphView.jsx.
+
+PROBLEM: Node labels use emoji (🖥️ 🗄️ 🪣 ⚡) which look
+unprofessional. The nodeCanvasObject draws emoji at the node center.
+
+CHANGE: Remove the emoji TYPE_ICONS and getNodeIcon function entirely.
+Replace the nodeCanvasObject with proper professional circles + text labels.
+
+NEW nodeCanvasObject:
+const nodeCanvasObject = useCallback((node, ctx, globalScale) => {
+  const r = Math.sqrt((node.val || 1)) * 5 + 4;
+  const colors = RISK_COLORS[node.risk_level] || RISK_COLORS.Low;
+
+  // Glow for high-risk nodes
+  if (node.risk_level === 'High') {
+    ctx.shadowColor = colors.bg;
+    ctx.shadowBlur = 16;
+  }
+
+  // Draw circle
+  ctx.beginPath();
+  ctx.arc(node.x, node.y, r, 0, 2 * Math.PI);
+  ctx.fillStyle = colors.bg;
+  ctx.fill();
+
+  // Border ring
+  ctx.strokeStyle = colors.border;
+  ctx.lineWidth = 1.5;
+  ctx.stroke();
+
+  ctx.shadowBlur = 0;
+
+  // Node name label below circle
+  const fontSize = Math.max(9, 11 / globalScale);
+  ctx.font = `500 ${fontSize}px Inter, sans-serif`;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'top';
+  ctx.fillStyle = 'rgba(241,245,249,0.85)';
+  const label = node.name?.length > 14 ? node.name.slice(0, 13) + '…' : (node.name || '');
+  ctx.fillText(label, node.x, node.y + r + 3);
+}, []);
+
+Remove: const TYPE_ICONS = { ... }
+Remove: function getNodeIcon(type) { ... }
+Remove: any call to getNodeIcon or TYPE_ICONS
+
+Keep everything else in GraphView.jsx unchanged — data fetching,
+selected node panel, blast radius, dimensions, force graph props.
+
+Show complete GraphView.jsx. Await "next".
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+FINAL — Git commit
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+After all 4 changes confirm:
+1. Predictions.jsx has NO stat-card, glass-card, card-value, card-label classes
+2. Resources.jsx filter buttons have gap: 8px between them (not merged text)
+3. Insights.jsx has NO #c9a84c color anywhere
+4. GraphView.jsx has NO emoji in nodeCanvasObject
+
+Git commit command:
+git add .
+git commit -m "fix: Predictions/Resources structure, Insights colors, Graph no emoji"
+git push origin main
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+FILES TO ATTACH:
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+frontend/src/pages/Predictions.jsx
+frontend/src/pages/Resources.jsx
+frontend/src/pages/Insights.jsx
+frontend/src/pages/GraphView.jsx
+frontend/src/components/shared/GlassPanel.jsx
+frontend/src/components/shared/AnimatedNumber.jsx
+frontend/src/components/shared/Motion.jsx
