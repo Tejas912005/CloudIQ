@@ -178,7 +178,7 @@ export function buildCommandCenterModel(snapshot, language = 'en') {
   const recommendations = snapshot.recommend || {};
 
   const summary = analyze.resources || {};
-  const resources = [];
+  const resources = analyze.resource_list || [];
   const anomalies = analyze.anomalies || {};
   const graph = analyze.graph || {};
   
@@ -438,7 +438,7 @@ export function buildCommandCenterModel(snapshot, language = 'en') {
       riskCountLabel: formatCompactNumber(riskResources.length || 0),
     },
     rawSummary: snapshot.analyze || {},
-    rawResources: [],
+    rawResources: snapshot?.analyze?.resource_list || [],
     rawPredictions: snapshot.predict || {},
     rawRecommendations: snapshot.recommend || {},
   };

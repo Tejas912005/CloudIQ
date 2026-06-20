@@ -67,6 +67,27 @@ def analyze(db: Session = Depends(get_db)):
             graph=graph_stats,
             anomalies=anomaly_summary,
             timestamp=datetime.utcnow().isoformat(),
+            resource_list=[
+                {
+                    "id": r.id,
+                    "name": r.name,
+                    "type": r.resource_type,
+                    "region": r.region,
+                    "cpu_usage": r.cpu_usage,
+                    "memory_usage": r.memory_usage,
+                    "uptime_hours": r.uptime_hours,
+                    "hourly_cost": r.hourly_cost,
+                    "monthly_cost": r.monthly_cost,
+                    "status": r.status,
+                    "efficiency_score": r.efficiency_score,
+                    "latency_ms": r.latency_ms,
+                    "error_rate": r.error_rate,
+                    "risk_score": r.risk_score,
+                    "sensitivity": r.sensitivity,
+                    "public_access": r.public_access,
+                }
+                for r in resources
+            ]
         )
 
     except Exception as e:

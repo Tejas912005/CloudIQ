@@ -79,7 +79,8 @@ def is_gemini_active() -> bool:
 def generate_response(
     message: str,
     history: list,
-    context_data: Optional[dict] = None
+    context_data: Optional[dict] = None,
+    system_prompt: Optional[str] = None,
 ) -> dict:
     """
     Send a message to Gemini and return the response.
@@ -104,17 +105,27 @@ def generate_response(
     try:
         from services import rag_memory
         past_interactions = rag_memory.retrieve_relevant_history(message, n_results=3)
-        rag_text = (
-            "\n\n[MEMORY — Relevant past interactions]:\n" +
-            "\n---\n".join(past_interactions)
-            if past_interactions else ""
-        )
     except Exception:
-        rag_text = ""
+        past_interactions = []
 
-    # Build full message with context injection
-    context_prompt = _build_context_prompt(context_data) + rag_text
-    full_message = message + context_prompt
+    # Dynamically select appropriate system instructions if not explicitly provided
+    if not system_prompt:
+        from core.prompts import CLOUDIQ_SYSTEM_PROMPT, build_rag_prompt, build_cloud_context_prompt
+        if past_interactions:
+            system_prompt = build_rag_prompt(past_interactions)
+        elif context_data:
+            system_prompt = build_cloud_context_prompt(context_data)
+        else:
+            system_prompt = CLOUDIQ_SYSTEM_PROMPT
+
+    # Build user message content
+    if past_interactions or context_data:
+        # Grounding context is already in system prompt, keep user message clean
+        full_message = message
+    else:
+        # Fallback to base prompt + empty context
+        context_prompt = _build_context_prompt(context_data)
+        full_message = message + context_prompt
 
     start = time.perf_counter()
     try:
@@ -139,7 +150,7 @@ def generate_response(
             model=settings.GEMINI_MODEL,
             contents=contents,
             config=types.GenerateContentConfig(
-                system_instruction=SYSTEM_INSTRUCTION,
+                system_instruction=system_prompt,
                 max_output_tokens=2048,
                 temperature=0.7,
             ),
@@ -174,69 +185,10 @@ def generate_response(
 
         if "quota" in err_str or "rate" in err_str or "429" in err_str:
             logger.error(f"[GEMINI] ⚠️  Rate limit after {latency_ms}ms — fallback: {e}")
-        elif "blocked" in err_str or "safety" in err_str:
-            logger.warning(f"[GEMINI] ⚠️  Safety block after {latency_ms}ms — fallback: {e}")
-        else:
-            logger.error(f"[GEMINI] ❌ API call failed after {latency_ms}ms: {e}")
-
-        # Reset client singleton to retry next time
-        global _client
-        _client = None
-
-        return _local_fallback(message, context_data, error=str(e))
 
 
-def stream_response(
-    message: str,
-    history: list,
-    context_data: Optional[dict] = None
-) -> Iterator[str]:
-    """Stream a Gemini response chunk by chunk, with local fallback as one chunk."""
-    client = get_client()
-
-    if client is None:
-        yield _local_fallback(message, context_data).get("response", "")
-        return
-
-    context_prompt = _build_context_prompt(context_data)
-    full_message = message + context_prompt
-
-    try:
-        from google.genai import types
-
-        contents = []
-        for h in history[-10:]:
-            role = "user" if h.get("role") == "user" else "model"
-            parts_list = h.get("parts", [{"text": ""}])
-            text = parts_list[0].get("text", "") if parts_list else ""
-            if text:
-                contents.append(types.Content(role=role, parts=[types.Part(text=text)]))
-
-        contents.append(types.Content(role="user", parts=[types.Part(text=full_message)]))
-
-        stream = client.models.generate_content_stream(
-            model=settings.GEMINI_MODEL,
-            contents=contents,
-            config=types.GenerateContentConfig(
-                system_instruction=SYSTEM_INSTRUCTION,
-                max_output_tokens=2048,
-                temperature=0.7,
-            ),
-        )
-
-        for chunk in stream:
-            text = getattr(chunk, "text", None)
-            if text:
-                yield text
-    except Exception as e:
-        logger.error(f"[GEMINI] Streaming failed: {e}")
-        global _client
-        _client = None
-        yield _local_fallback(message, context_data, error=str(e)).get("response", "")
 
 
-# ══════════════════════════════════════════════════════════════════════════════
-#  CONTEXT BUILDER — imported from services.shared_utils
 # ══════════════════════════════════════════════════════════════════════════════
 # _build_context_prompt is already imported at the top of this file from
 # services.shared_utils. The canonical version lives there.

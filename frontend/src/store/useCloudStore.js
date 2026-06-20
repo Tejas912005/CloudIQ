@@ -90,15 +90,16 @@ export const useCloudStore = create((set, get) => ({
   refreshData: async () => {
     set({ loading: true, error: '' });
     try {
-      const [health, analyze, predict, recommend] = await Promise.all([
+      const [health, analyze, predict, recommend, history] = await Promise.all([
         fetchJson('/api/health'),
         fetchJson('/api/analyze'),
         fetchJson('/api/predict'),
         fetchJson('/api/recommend'),
+        fetchJson('/api/cost-history'),
       ]);
 
       set({
-        snapshot: { health, analyze, predict, recommend },
+        snapshot: { health, analyze, predict, recommend, history },
         lastUpdated: new Date().toISOString(),
         loading: false,
       });
@@ -152,5 +153,3 @@ export const useCloudStore = create((set, get) => ({
     return copy.statusIdle;
   },
 }));
-
-

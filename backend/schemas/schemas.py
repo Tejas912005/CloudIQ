@@ -51,6 +51,7 @@ class AnalyzeResponse(BaseModel):
     graph:       GraphStats
     anomalies:   AnomalySummary
     timestamp:   str
+    resource_list: List[Dict[str, Any]] = []
 
 
 # ══════════════════════════════════════════════════════════════════
