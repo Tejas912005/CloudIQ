@@ -76,6 +76,51 @@ def is_gemini_active() -> bool:
 #  GENERATE RESPONSE  (Live Gemini API call)
 # ══════════════════════════════════════════════════════════════════════════════
 
+def _groq_fallback(
+    message: str,
+    history: list,
+    context_data: Optional[dict] = None,
+    system_prompt: Optional[str] = None,
+) -> dict:
+    """Fallback to Groq service when Gemini fails or is inactive."""
+    try:
+        from services import groq_service
+        import time
+        start = time.perf_counter()
+        
+        logger.info("[ROUTER] Attempting Groq fallback in non-streaming mode...")
+        groq_response = ""
+        for chunk in groq_service.stream_response(
+            message, history, context_data, system_prompt=system_prompt, rag_history=None
+        ):
+            if "⚠️ Groq API error:" in chunk or "Groq API error" in chunk:
+                raise Exception(chunk.strip())
+            groq_response += chunk
+        
+        if not groq_response:
+            raise Exception("Groq returned empty response")
+            
+        latency_ms = round((time.perf_counter() - start) * 1000, 1)
+        logger.info(f"[GROQ] ✅ Fallback response received in {latency_ms}ms ({len(groq_response)} chars)")
+        
+        # Store in RAG memory
+        try:
+            from services import rag_memory
+            rag_memory.store_interaction(message, groq_response)
+        except Exception:
+            pass
+            
+        return {
+            "response":   groq_response,
+            "status":     "ok",
+            "mode":       "groq",
+            "latency_ms": latency_ms,
+        }
+    except Exception as groq_err:
+        logger.error(f"[GROQ] Non-streaming fallback failed: {groq_err}")
+        raise groq_err
+
+
 def generate_response(
     message: str,
     history: list,
@@ -85,30 +130,25 @@ def generate_response(
     """
     Send a message to Gemini and return the response.
     Logs every call with timing.
-    Falls back to local_fallback if Gemini fails.
+    Falls back to Groq, and then local_fallback if Gemini fails.
 
     Returns:
         {
           "response": str,
           "status": "ok" | "error",
-          "mode": "gemini" | "local_fallback",
+          "mode": "gemini" | "groq" | "local_fallback",
           "latency_ms": float
         }
     """
     client = get_client()
 
-    if client is None:
-        logger.warning("[GEMINI] Client not available — routing to local fallback")
-        return _local_fallback(message, context_data)
-
-    # Retrieve relevant past interactions from RAG memory
+    # Pre-build system prompt and full message so we can reuse them if fallback is needed
     try:
         from services import rag_memory
         past_interactions = rag_memory.retrieve_relevant_history(message, n_results=3)
     except Exception:
         past_interactions = []
 
-    # Dynamically select appropriate system instructions if not explicitly provided
     if not system_prompt:
         from core.prompts import CLOUDIQ_SYSTEM_PROMPT, build_rag_prompt, build_cloud_context_prompt
         if past_interactions:
@@ -118,14 +158,21 @@ def generate_response(
         else:
             system_prompt = CLOUDIQ_SYSTEM_PROMPT
 
-    # Build user message content
     if past_interactions or context_data:
-        # Grounding context is already in system prompt, keep user message clean
         full_message = message
     else:
-        # Fallback to base prompt + empty context
         context_prompt = _build_context_prompt(context_data)
         full_message = message + context_prompt
+
+    if client is None:
+        logger.warning("[GEMINI] Client not available — trying Groq fallback")
+        from services import groq_service
+        if groq_service.is_groq_active():
+            try:
+                return _groq_fallback(message, history, context_data, system_prompt)
+            except Exception:
+                pass
+        return _local_fallback(message, context_data)
 
     start = time.perf_counter()
     try:
@@ -181,10 +228,16 @@ def generate_response(
 
     except Exception as e:
         latency_ms = round((time.perf_counter() - start) * 1000, 1)
-        err_str = str(e).lower()
+        logger.error(f"[GEMINI] ⚠️ Error after {latency_ms}ms — trying Groq fallback: {e}")
 
-        if "quota" in err_str or "rate" in err_str or "429" in err_str:
-            logger.error(f"[GEMINI] ⚠️  Rate limit after {latency_ms}ms — fallback: {e}")
+        from services import groq_service
+        if groq_service.is_groq_active():
+            try:
+                return _groq_fallback(message, history, context_data, system_prompt)
+            except Exception:
+                pass
+
+        return _local_fallback(message, context_data, error=str(e))
 
 
 

@@ -11,6 +11,7 @@ This means the chat will ALWAYS respond, regardless of which API is down.
 """
 import logging
 from typing import Iterator, Optional
+from sqlalchemy.orm import Session
 from services import gemini_service
 from services import groq_service
 from services import rag_memory
@@ -85,12 +86,12 @@ def _stream_groq(message: str, history: list, context_data: Optional[dict], syst
         raise Exception("Groq returned empty response")
 
 
-def _stream_local_fallback(message: str, context_data: Optional[dict]) -> Iterator[str]:
+def _stream_local_fallback(message: str, context_data: Optional[dict], db: Session = None) -> Iterator[str]:
     """Always succeeds — uses local rule-based analytics engine."""
     try:
         from local_fallback import generate_local_response, infer_intent_from_keywords
         intent = infer_intent_from_keywords(message)
-        response = generate_local_response(message, intent, context_data)
+        response = generate_local_response(message, intent, context_data, db=db)
         yield response
     except Exception as e:
         yield f"CloudIQ is running. Ask about resource usage, cost analysis, or optimization recommendations."
@@ -100,7 +101,8 @@ def stream_routed_response(
     message: str,
     history: list,
     context_data: Optional[dict] = None,
-    intent: str = "none"
+    intent: str = "none",
+    db: Session = None
 ) -> Iterator[str]:
     """
     Full bidirectional failover routing:
@@ -130,7 +132,7 @@ def stream_routed_response(
     if is_greeting or is_identity or is_help or is_math:
         logger.info(f"[ROUTER] Fast-path local match for: '{message}'")
         fallback_intent = infer_intent_from_keywords(message)
-        response = generate_local_response(message, fallback_intent, context_data)
+        response = generate_local_response(message, fallback_intent, context_data, db=db)
         yield response
         if response.strip():
             rag_memory.store_interaction(message, response)
@@ -183,7 +185,7 @@ def stream_routed_response(
 
     # 4. Last resort: local analytics fallback (never fails)
     logger.info("[ROUTER] FALLBACK: Using local analytics engine.")
-    for chunk in _stream_local_fallback(message, context_data):
+    for chunk in _stream_local_fallback(message, context_data, db=db):
         full_response += chunk
         yield chunk
 

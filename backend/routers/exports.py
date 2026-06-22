@@ -37,7 +37,7 @@ def export_pdf(db: Session = Depends(get_db)):
             Table, TableStyle, HRFlowable,
         )
 
-        # ── Fetch data ────────────────────────────────────────────
+        # â”€â”€ Fetch data â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
         resources    = db.query(CloudResource).all()
         recs         = db.query(Recommendation).order_by(Recommendation.priority).limit(10).all()
         anomalies    = db.query(AnomalyRecord).limit(10).all()
@@ -49,7 +49,7 @@ def export_pdf(db: Session = Depends(get_db)):
         healthy     = len(resources) - idle_count - over_count
         top_cost    = sorted(resources, key=lambda r: r.monthly_cost or 0, reverse=True)[:10]
 
-        # ── Document setup ────────────────────────────────────────
+        # â”€â”€ Document setup â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
         buf  = io.BytesIO()
         doc  = SimpleDocTemplate(buf, pagesize=A4,
                                  leftMargin=2*cm, rightMargin=2*cm,
@@ -68,7 +68,7 @@ def export_pdf(db: Session = Depends(get_db)):
                               fontSize=9, textColor=colors.HexColor("#94a3b8"))
         generated = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
 
-        story.append(Paragraph("☁  CloudIQ Dashboard Report", H1))
+        story.append(Paragraph("â˜  CloudIQ Dashboard Report", H1))
         story.append(Paragraph(f"Generated: {generated}", BODY))
         story.append(HRFlowable(width="100%", thickness=1,
                                 color=colors.HexColor("#1e3a5f"), spaceAfter=12))
@@ -102,7 +102,7 @@ def export_pdf(db: Session = Depends(get_db)):
             story.append(Paragraph("Active Recommendations", H2))
             rec_data = [["Resource", "Action", "Priority", "Est. Savings"]]
             for r in recs:
-                savings = f"${r.estimated_savings:,.2f}" if r.estimated_savings else "—"
+                savings = f"${r.estimated_savings:,.2f}" if r.estimated_savings else "â€”"
                 rec_data.append([r.resource_name, r.action[:60], r.priority, savings])
             story.append(_make_table(rec_data))
             story.append(Spacer(1, 0.4*cm))
@@ -115,7 +115,7 @@ def export_pdf(db: Session = Depends(get_db)):
                 hist_data.append([
                     ch.date,
                     f"${ch.daily_cost:,.2f}",
-                    "⚠ Yes" if ch.is_anomaly else "✓ No",
+                    "âš  Yes" if ch.is_anomaly else "âœ“ No",
                 ])
             story.append(_make_table(hist_data))
 
@@ -175,7 +175,7 @@ def export_xlsx(db: Session = Depends(get_db)):
 
         wb = openpyxl.Workbook()
 
-        # ── Styling helpers ───────────────────────────────────────
+        # â”€â”€ Styling helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
         HDR_FILL  = PatternFill("solid", fgColor="0D2137")
         HDR_FONT  = Font(bold=True, color="63B2FF", size=10)
         EVEN_FILL = PatternFill("solid", fgColor="0A1628")
@@ -239,11 +239,13 @@ def export_xlsx(db: Session = Depends(get_db)):
         if anomalies:
             ws4 = wb.create_sheet("Anomalies")
             write_sheet(ws4,
-                ["Resource ID", "Type", "Score", "Description", "Detected At"],
-                [[a.resource_id, a.anomaly_type if hasattr(a, "anomaly_type") else "cost",
-                  round(a.score if hasattr(a, "score") else 0, 2),
-                  a.description if hasattr(a, "description") else "",
-                  str(a.detected_at if hasattr(a, "detected_at") else "")
+                ["Resource ID", "Type", "Z-Score", "Deviation", "Severity", "Description", "Detected At"],
+                [[a.resource_id, a.anomaly_type,
+                  round(a.z_score or 0.0, 2),
+                  round(a.deviation or 0.0, 2),
+                  a.severity or "medium",
+                  a.description or "",
+                  str(a.created_at or "")
                   ] for a in anomalies]
             )
 

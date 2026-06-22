@@ -105,7 +105,7 @@ export default function Recommendations() {
                 </div>
                 <button 
                   className="command-button w-full justify-center"
-                  onClick={() => navigate('/assistant')}
+                  onClick={() => navigate('/assistant', { state: { autoMessage: `Stage action: ${item.action} for ${item.resource_name}` } })}
                 >
                   Stage action
                   <ArrowUpRight className="h-3.5 w-3.5" />

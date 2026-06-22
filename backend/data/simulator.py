@@ -241,19 +241,19 @@ def seed_cost_history(db: Session) -> int:
     """
     today = datetime.utcnow()
     days = 90
-    base_cost = 347.50  # starting daily spend
+    base_cost = 420.00  # starting daily spend
     spike_days = random.sample(range(days), k=max(2, days // 30 * 2))
     records_created = 0
 
     for i in range(days):
         date = (today - timedelta(days=days - i)).strftime("%Y-%m-%d")
-        # Upward trend: +0.5% per week
-        trend = base_cost * (1 + 0.005 * (i / 7))
+        # Upward trend: +4% per week — produces a clear rising slope
+        trend = base_cost * (1 + 0.04 * (i / 7))
         # Weekly seasonality: weekends cost 20% less (lower traffic)
         day_of_week = (today - timedelta(days=days - i)).weekday()
         seasonal = 0.80 if day_of_week >= 5 else 1.0
-        # Random variance ±8%
-        variance  = random.uniform(0.92, 1.08)
+        # Random variance ±15%
+        variance  = random.uniform(0.85, 1.15)
         # Traffic spike events
         spike     = random.uniform(1.4, 2.1) if i in spike_days else 1.0
 

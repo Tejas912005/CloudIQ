@@ -20,7 +20,18 @@ from models.models import CostHistory, CloudResource, AnomalyRecord
 logger = logging.getLogger("cloudiq.anomaly_service")
 
 
-# ─── Severity classification ──────────────────────────────────────────────────
+# â”€â”€â”€ Severity classification â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+import time
+
+_cost_cache = {"result": None, "ts": 0.0}
+_metric_cache = {"result": None, "ts": 0.0}
+CACHE_TTL = 60
+
+def _format_currency_simple(amount: float) -> str:
+    return f"${amount:,.2f}"
+
+
+# â”€â”€â”€ Severity classification â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 def _severity(z_score: float) -> str:
     az = abs(z_score)
     if az >= 4.0:
@@ -32,9 +43,9 @@ def _severity(z_score: float) -> str:
     return "low"
 
 
-# ══════════════════════════════════════════════════════════════════════════════
+# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 #  COST ANOMALY DETECTION  (Z-score on daily cost history)
-# ══════════════════════════════════════════════════════════════════════════════
+# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 
 def detect_cost_anomalies(db: Session) -> Dict:
     """
@@ -42,6 +53,11 @@ def detect_cost_anomalies(db: Session) -> Dict:
     Flags days where |z| > 2.0.
     Also updates CostHistory.is_anomaly and persists AnomalyRecord rows.
     """
+    global _cost_cache
+    now_ts = time.time()
+    if _cost_cache["result"] is not None and now_ts - _cost_cache["ts"] < CACHE_TTL:
+        return _cost_cache["result"]
+
     rows = db.query(CostHistory).order_by(CostHistory.date).all()
     if not rows:
         return {"anomalies": [], "mean_cost": 0, "std_cost": 0, "total_anomaly_days": 0}
@@ -55,7 +71,8 @@ def detect_cost_anomalies(db: Session) -> Dict:
 
     anomalies = []
 
-    # We removed db.query(AnomalyRecord).delete() to avoid SQLite concurrent write locks
+    # Clear old cost anomaly records
+    db.query(AnomalyRecord).filter(AnomalyRecord.anomaly_type == "cost").delete()
 
     for row, z, cost in zip(rows, z_scores, costs):
         is_anomaly = abs(z) > 2.0
@@ -71,21 +88,39 @@ def detect_cost_anomalies(db: Session) -> Dict:
                 "deviation":  round(deviation, 2),
                 "severity":   sev,
             })
+            
+            db.add(AnomalyRecord(
+                anomaly_type="cost",
+                date=row.date,
+                value=round(float(cost), 2),
+                z_score=round(float(z), 2),
+                deviation=round(deviation, 2),
+                severity=sev,
+                description=f"Daily spend anomaly detected: daily cost was {_format_currency_simple(cost)} (deviation: {_format_currency_simple(deviation)})"
+            ))
 
+    try:
+        db.commit()
+    except Exception as e:
+        db.rollback()
+        logger.error(f"[ANOMALY] Failed to commit cost anomalies: {e}")
 
     logger.info(f"[ANOMALY] Cost anomalies detected: {len(anomalies)} / {len(rows)} days")
 
-    return {
+    result = {
         "anomalies":          anomalies,
         "mean_cost":          round(mean, 2),
         "std_cost":           round(std, 2),
         "total_anomaly_days": len(anomalies),
     }
+    _cost_cache["result"] = result
+    _cost_cache["ts"] = now_ts
+    return result
 
 
-# ══════════════════════════════════════════════════════════════════════════════
+# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 #  METRIC ANOMALY DETECTION  (CPU, latency, error_rate per resource)
-# ══════════════════════════════════════════════════════════════════════════════
+# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 
 def detect_metric_anomalies(db: Session) -> List[Dict]:
     """
@@ -93,15 +128,21 @@ def detect_metric_anomalies(db: Session) -> List[Dict]:
     Generates AnomalyRecord entries for metric violations.
 
     Thresholds:
-      - cpu_usage     > 90% → high/critical
-      - latency_ms    > 500 → medium/high
-      - error_rate    > 5%  → medium/high/critical
-      - memory_usage  > 90% → high
+      - cpu_usage     > 90% â†’ high/critical
+      - latency_ms    > 500 â†’ medium/high
+      - error_rate    > 5%  â†’ medium/high/critical
+      - memory_usage  > 90% â†’ high
     """
+    global _metric_cache
+    now_ts = time.time()
+    if _metric_cache["result"] is not None and now_ts - _metric_cache["ts"] < CACHE_TTL:
+        return _metric_cache["result"]
+
     resources = db.query(CloudResource).all()
     metric_anomalies = []
 
-    # We removed db.query(AnomalyRecord).delete() to avoid SQLite concurrent write locks
+    # Clear old metric anomalies
+    db.query(AnomalyRecord).filter(AnomalyRecord.anomaly_type != "cost").delete()
 
     today = datetime.utcnow().strftime("%Y-%m-%d")
 
@@ -133,15 +174,34 @@ def detect_metric_anomalies(db: Session) -> List[Dict]:
                     "severity":      sev,
                     "description":   desc,
                 })
+                
+                db.add(AnomalyRecord(
+                    resource_id=r.id,
+                    anomaly_type=metric_type,
+                    date=today,
+                    value=round(value, 2),
+                    z_score=0.0,
+                    deviation=round(value - threshold, 2),
+                    severity=sev,
+                    description=desc
+                ))
 
+    try:
+        db.commit()
+    except Exception as e:
+        db.rollback()
+        logger.error(f"[ANOMALY] Failed to commit metric anomalies: {e}")
 
     logger.info(f"[ANOMALY] Metric anomalies detected: {len(metric_anomalies)} violations")
+    
+    _metric_cache["result"] = metric_anomalies
+    _metric_cache["ts"] = now_ts
     return metric_anomalies
 
 
-# ══════════════════════════════════════════════════════════════════════════════
+# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 #  COMBINED ANOMALY REPORT
-# ══════════════════════════════════════════════════════════════════════════════
+# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 
 def get_full_anomaly_report(db: Session) -> Dict:
     """Combined cost + metric anomaly detection."""

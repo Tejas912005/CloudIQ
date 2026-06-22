@@ -13,7 +13,7 @@ import ssl
 
 # ─── Engine ───────────────────────────────────────────────────────────────────
 # check_same_thread=False is required for SQLite + FastAPI (multiple threads)
-connect_args = {"check_same_thread": False} if settings.DB_URL.startswith("sqlite") else {}
+connect_args = {"check_same_thread": False, "timeout": 30} if settings.DB_URL.startswith("sqlite") else {}
 
 # Use pg8000 driver to bypass Windows DLL blocking policies
 db_url = settings.DB_URL

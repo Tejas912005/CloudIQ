@@ -13,14 +13,14 @@ export default function WhatIfSimulator() {
 
   if (!platform) return null;
 
-  const idleCount = platform.rawSummary?.idle_count || 0;
-  const totalCost = platform.rawSummary?.total_monthly_cost || 0;
+  const idleCount = platform.rawSummary?.resources?.idle_count || 0;
+  const totalCost = platform.rawSummary?.resources?.total_monthly_cost || 0;
   const avgIdleCost = idleCount > 0 ? (totalCost * 0.15) / idleCount : 0;
   const projectedSavings = Math.round(idleToStop * avgIdleCost);
   const projectedTotal = Math.max(0, totalCost - projectedSavings);
 
   const handleExecute = () => {
-    navigate('/assistant');
+    navigate('/assistant', { state: { autoMessage: `Stage action: Terminate ${idleToStop} idle resources` } });
   };
 
   return (

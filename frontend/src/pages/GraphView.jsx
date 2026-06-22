@@ -1,8 +1,9 @@
 import { useEffect, useState, useRef, useCallback } from 'react';
 import ForceGraph2D from 'react-force-graph-2d';
+import { Network, MousePointerClick, Zap, CheckCircle2, ShieldAlert } from 'lucide-react';
 import { fetchJson } from '../lib/api';
 
-// ─── Color mapping by risk level — resolved from CSS variables at runtime ─────
+// â”€â”€â”€ Color mapping by risk level â€” resolved from CSS variables at runtime â”€â”€â”€â”€â”€
 function getRiskColors() {
   const s = typeof getComputedStyle !== 'undefined'
     ? getComputedStyle(document.documentElement)
@@ -30,7 +31,7 @@ export default function GraphView() {
   const containerRef = useRef(null);
   const fgRef = useRef();
 
-  // ── Fetch graph data ────────────────────────────────────────────────────────
+  // â”€â”€ Fetch graph data â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   useEffect(() => {
     fetchJson('/api/graph')
       .then(data => {
@@ -57,7 +58,7 @@ export default function GraphView() {
     return () => window.removeEventListener('resize', handleResize);
   }, [graphData]);
 
-  // ── Handle node click: fetch blast radius ────────────────────────────────────
+  // â”€â”€ Handle node click: fetch blast radius â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const handleNodeClick = useCallback(async (node) => {
     if (selected?.id === node.id) {
       setSelected(null);
@@ -116,7 +117,7 @@ export default function GraphView() {
     ctx.textBaseline = 'top';
     ctx.fillStyle = 'rgba(241,245,249,0.85)';
     const label =
-      node.name?.length > 14 ? node.name.slice(0, 13) + '…' : node.name || '';
+      node.name?.length > 14 ? node.name.slice(0, 13) + 'â€¦' : node.name || '';
     ctx.fillText(label, node.x, node.y + r + 3);
   }, []);
 
@@ -126,7 +127,7 @@ export default function GraphView() {
       <div className="flex items-center justify-center h-96" style={{ color: 'var(--text-muted)' }}>
         <div className="text-center">
           <div className="mx-auto mb-4 h-10 w-10 animate-spin rounded-full border-4 border-current border-t-transparent" />
-          <p className="text-sm">Building resource dependency graph…</p>
+          <p className="text-sm">Building resource dependency graphâ€¦</p>
         </div>
       </div>
     );
@@ -135,7 +136,7 @@ export default function GraphView() {
   if (error) {
     return (
       <div className="flex items-center justify-center h-64" style={{ color: 'var(--danger)' }}>
-        <p>❌ Failed to load graph: {error}</p>
+        <p>âŒ Failed to load graph: {error}</p>
       </div>
     );
   }
@@ -144,13 +145,13 @@ export default function GraphView() {
 
   return (
     <div className="mx-auto max-w-[1600px] animate-fade space-y-4">
-      {/* ── Header ── */}
+      {/* ——— Header ——— */}
       <div
         className="rounded-2xl border p-5"
         style={{ background: 'var(--surface)', borderColor: 'var(--border)' }}
       >
-        <h1 className="font-display text-xl font-bold mb-1" style={{ color: 'var(--text-base)' }}>
-          🕸️ Cloud Resource Dependency Graph
+        <h1 className="font-display text-xl font-bold mb-1 flex items-center gap-2" style={{ color: 'var(--text-base)' }}>
+          <Network size={20} style={{ color: 'var(--accent)', flexShrink: 0 }} /> Cloud Resource Dependency Graph
         </h1>
         <p className="text-sm" style={{ color: 'var(--text-muted)' }}>
           Click any node to simulate its blast radius. Nodes are colored by risk level.
@@ -162,9 +163,9 @@ export default function GraphView() {
             { label: 'Total Nodes',   value: stats.total_nodes ?? nodes.length },
             { label: 'Total Edges',   value: stats.total_edges ?? edges.length },
             { label: 'High Risk',     value: stats.high_risk_nodes ?? 0, color: '#ef4444' },
-            { label: 'Avg Risk',      value: stats.avg_risk_score?.toFixed(1) ?? '—' },
-            { label: 'Density',       value: stats.density?.toFixed(4) ?? '—' },
-            { label: 'Components',    value: stats.connected_components ?? '—' },
+            { label: 'Avg Risk',      value: stats.avg_risk_score?.toFixed(1) ?? 'â€”' },
+            { label: 'Density',       value: stats.density?.toFixed(4) ?? 'â€”' },
+            { label: 'Components',    value: stats.connected_components ?? 'â€”' },
           ].map(s => (
             <div
               key={s.label}
@@ -195,7 +196,7 @@ export default function GraphView() {
       </div>
 
       <div className="flex gap-4">
-        {/* ── Graph Canvas ── */}
+        {/* â”€â”€ Graph Canvas â”€â”€ */}
         <div
           ref={containerRef}
           className="relative flex-1 overflow-hidden rounded-2xl border cursor-move"
@@ -233,7 +234,7 @@ export default function GraphView() {
           )}
         </div>
 
-        {/* ── Detail Panel ── */}
+        {/* â”€â”€ Detail Panel â”€â”€ */}
         <div
           className="w-72 shrink-0 rounded-2xl border p-4 space-y-4"
           style={{ background: 'var(--surface)', borderColor: 'var(--border)' }}
@@ -241,7 +242,7 @@ export default function GraphView() {
           {!selected ? (
             <div className="flex h-full items-center justify-center text-center px-4">
               <div>
-                <div className="mx-auto mb-3 text-4xl">👆</div>
+                <MousePointerClick size={36} className="mx-auto mb-3" style={{ color: 'var(--accent)' }} />
                 <p className="text-sm font-medium" style={{ color: 'var(--text-base)' }}>
                   Click any node to inspect it
                 </p>
@@ -259,7 +260,7 @@ export default function GraphView() {
                       {selected.name}
                     </p>
                     <p className="text-xs" style={{ color: 'var(--text-muted)' }}>
-                      {selected.resource_uid} · {selected.provider}
+                      {selected.resource_uid} Â· {selected.provider}
                     </p>
                   </div>
                 </div>
@@ -272,7 +273,7 @@ export default function GraphView() {
                     color: RISK_COLORS[selected.risk_level]?.text,
                   }}
                 >
-                  {selected.risk_level} Risk — Score {selected.risk_score?.toFixed(1)}
+                  {selected.risk_level} Risk â€” Score {selected.risk_score?.toFixed(1)}
                 </span>
               </div>
 
@@ -286,7 +287,7 @@ export default function GraphView() {
                   { label: 'Monthly Cost', value: `$${selected.monthly_cost?.toFixed(0)}` },
                   { label: 'Status', value: selected.status },
                   { label: 'Sensitivity', value: selected.sensitivity },
-                  { label: 'Public', value: selected.public_access ? '⚠️ Yes' : '✅ No' },
+                  { label: 'Public', value: selected.public_access ? '⚠ Yes' : '✓ No' },
                 ].map(m => (
                   <div
                     key={m.label}
@@ -301,8 +302,8 @@ export default function GraphView() {
 
               {/* Blast Radius */}
               <div>
-                <p className="text-xs font-semibold mb-2" style={{ color: 'var(--text-base)' }}>
-                  💥 Blast Radius
+                <p className="text-xs font-semibold mb-2 flex items-center gap-1.5" style={{ color: 'var(--text-base)' }}>
+                  <Zap size={13} style={{ color: '#a855f7' }} /> Blast Radius
                 </p>
                 {blastLoading && (
                   <p className="text-xs" style={{ color: 'var(--text-muted)' }}>Computing…</p>
@@ -323,7 +324,6 @@ export default function GraphView() {
                           style={{ background: 'rgba(168,85,247,0.1)', border: '1px solid rgba(168,85,247,0.3)' }}
                         >
                           <span className="text-xs" style={{ color: 'var(--text-dim)' }}>
-                            {/* icon removed */}
                           </span>
                           <span className="text-xs" style={{ color: 'var(--text-base)' }}>{n.name}</span>
                         </div>
@@ -332,8 +332,8 @@ export default function GraphView() {
                   </div>
                 )}
                 {blastRadius && blastRadius.count === 0 && (
-                  <p className="text-xs" style={{ color: '#22c55e' }}>
-                    ✅ No downstream impact — blast radius contained.
+                  <p className="text-xs flex items-center gap-1" style={{ color: '#22c55e' }}>
+                    <CheckCircle2 size={12} /> No downstream impact — blast radius contained.
                   </p>
                 )}
               </div>

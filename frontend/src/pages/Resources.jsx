@@ -128,10 +128,10 @@ export default function Resources() {
         ))}
       </StaggerParent>
 
-      {/* Filter row + search — horizontal flex, gap 12px */}
+      {/* Filter row + search â€” horizontal flex, gap 12px */}
       <FadeUp delay={0.12}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
-          {/* Status filter pills — gap: 8px between each button */}
+          {/* Status filter pills â€” gap: 8px between each button */}
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
             {STATUS_FILTERS.map((status) => (
               <button

@@ -37,15 +37,31 @@ IDENTITY_PHRASES = [
 def resolve_intent(message: str) -> str:
     """
     Classify a user message into one of the following intent strings:
-      "agent_mode"         → triggers the multi-step agentic loop
-      "analyze_resources"  → resource health / status queries
-      "detect_anomalies"   → anomaly detection queries
-      "predict_costs"      → cost forecasting queries
-      "predict_resource_risk" → risk scoring queries
-      "ui_theme_control"   → theme / UI commands
-      "none"               → general conversation
+      "agent_mode"                  → triggers the multi-step agentic loop
+      "navigate_globe"              → navigates the UI to the globe view
+      "navigate_graph"              → navigates the UI to the graph view
+      "terminate_idle"              → triggers the idle termination approval card
+      "stop_risky_resources"        → triggers the risky resources shutdown card
+      "analyze_resources"           → resource health / status queries
+      "detect_anomalies"            → anomaly detection queries
+      "predict_costs"               → cost forecasting queries
+      "predict_resource_risk"        → risk scoring queries
+      "ui_theme_control"            → theme / UI commands
+      "none"                        → general conversation
     """
     lower = message.lower().strip()
+
+    # --- Specific Agentic UI/Mutation Intents ---
+    if any(kw in lower for kw in ["terminate", "kill", "shut down", "delete"]) and "idle" in lower:
+        return "terminate_idle"
+    if "stage action" in lower and ("terminate" in lower or "stop" in lower):
+        return "terminate_idle"
+    if any(kw in lower for kw in ["stop", "terminate", "kill", "shut down", "disable"]) and any(kw in lower for kw in ["risky", "unhealthy", "overutilized", "over-utilized", "over utilized"]):
+        return "stop_risky_resources"
+    if "globe" in lower or "map" in lower:
+        return "navigate_globe"
+    if "graph" in lower or "network" in lower:
+        return "navigate_graph"
 
     if any(kw in lower for kw in AGENT_KEYWORDS):
         return "agent_mode"

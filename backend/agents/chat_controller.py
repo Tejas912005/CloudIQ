@@ -18,6 +18,7 @@ from sqlalchemy.orm import Session
 
 from models.models import ChatLog
 from local_fallback import infer_intent_from_keywords
+from services.gemini_service import generate_response
 
 logger = logging.getLogger("cloudiq.agents.chat_controller")
 

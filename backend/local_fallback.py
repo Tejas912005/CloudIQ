@@ -1,4 +1,5 @@
 from tools import get_tool_data
+from sqlalchemy.orm import Session
 
 
 def infer_intent_from_keywords(message: str) -> str:
@@ -141,12 +142,12 @@ def _format_risks(data):
     return "\n".join(lines)
 
 
-def _format_agent_summary():
-    analysis = get_tool_data("analyze_resources") or {}
-    anomalies = get_tool_data("detect_anomalies") or {}
-    forecast = get_tool_data("predict_costs") or {}
-    risks = (get_tool_data("predict_resource_risk") or {}).get("high_risk_resources", [])
-    recommendations = get_tool_data("generate_recommendations") or {}
+def _format_agent_summary(db: Session = None):
+    analysis = get_tool_data("analyze_resources", db) or {}
+    anomalies = get_tool_data("detect_anomalies", db) or {}
+    forecast = get_tool_data("predict_costs", db) or {}
+    risks = (get_tool_data("predict_resource_risk", db) or {}).get("high_risk_resources", [])
+    recommendations = get_tool_data("generate_recommendations", db) or {}
     cost_anomalies = anomalies.get("cost_anomalies", anomalies)
 
     lines = [
@@ -189,7 +190,7 @@ def _format_agent_summary():
     return "\n".join(lines)
 
 
-def generate_local_response(message: str, intent: str, context_data=None) -> str:
+def generate_local_response(message: str, intent: str, context_data=None, db: Session = None) -> str:
     """
     Generate a smart, friendly local response when LLMs (Gemini & Groq) are offline.
     Handles conversational greetings, basic math, and intent routing seamlessly.
@@ -246,18 +247,18 @@ def generate_local_response(message: str, intent: str, context_data=None) -> str
 
     # 4. Route standard intent-based responses
     if intent == "analyze_resources":
-        return _format_resource_analysis(context_data or get_tool_data("analyze_resources"))
+        return _format_resource_analysis(context_data or get_tool_data("analyze_resources", db))
     if intent == "detect_anomalies":
-        return _format_anomalies(context_data or get_tool_data("detect_anomalies"))
+        return _format_anomalies(context_data or get_tool_data("detect_anomalies", db))
     if intent == "predict_costs":
-        return _format_cost_forecast(context_data or get_tool_data("predict_costs"))
+        return _format_cost_forecast(context_data or get_tool_data("predict_costs", db))
     if intent == "predict_resource_risk":
         # Extract high risk resources
-        risk_data = context_data or get_tool_data("predict_resource_risk") or {}
+        risk_data = context_data or get_tool_data("predict_resource_risk", db) or {}
         high_risks = risk_data.get("high_risk_resources", risk_data) if isinstance(risk_data, dict) else risk_data
         return _format_risks(high_risks)
     if intent == "agent_mode":
-        return _format_agent_summary()
+        return _format_agent_summary(db)
 
     # 5. Default conversational response for other general questions
     return (

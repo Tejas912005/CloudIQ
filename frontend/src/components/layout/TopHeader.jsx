@@ -27,8 +27,8 @@ export default function TopHeader() {
   const [showAuth, setShowAuth] = useState(false);
   const title = TITLES[location.pathname] || 'Dashboard';
 
-  const totalResources = platform?.rawSummary?.total_resources || 0;
-  const totalCost = platform?.rawSummary?.total_monthly_cost || 0;
+  const totalResources = platform?.rawSummary?.resources?.total_resources || 0;
+  const totalCost = platform?.rawSummary?.resources?.total_monthly_cost || 0;
   const geminiActive = platform?.health?.gemini_active !== false;
 
   return (
@@ -132,6 +132,7 @@ export default function TopHeader() {
               {theme === 'dark' ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
             </button>
 
+            {/* HIDDEN FOR VIVA — sign-in / user auth block
             {user ? (
               <div className="flex items-center gap-2">
                 <div
@@ -160,6 +161,7 @@ export default function TopHeader() {
                 <span className="hidden sm:inline">Sign In</span>
               </button>
             )}
+            END HIDDEN */}
 
             <div className="hidden items-center gap-1.5 sm:flex" style={{ color: 'var(--text-dim)' }}>
               <RefreshCcw className={`h-3.5 w-3.5 ${loading ? 'animate-[spin_1s_linear_infinite]' : ''}`} />

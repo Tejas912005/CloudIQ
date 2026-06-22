@@ -1,4 +1,5 @@
 import { lazy, Suspense, useEffect, useRef, useState } from 'react';
+import { useLocation } from 'react-router-dom';
 import { UploadCloud } from 'lucide-react';
 import { CheckCircle2, Loader2, SendHorizonal, ShieldAlert, Trash2 } from 'lucide-react';
 import { AnimatePresence, motion as Motion } from 'framer-motion';
@@ -138,8 +139,9 @@ function ActionCard({ card }) {
 }
 
 export default function Assistant() {
+  const location = useLocation();
   const {
-    copy, language, platform, registerAgentRun, updateLanguageFromMessage,
+    copy, language, platform, registerAgentRun, updateLanguageFromMessage, theme,
   } = useCloudIQ();
   const [messages, setMessages] = useState(() => loadThread(copy));
   const [input, setInput] = useState('');
@@ -147,6 +149,7 @@ export default function Assistant() {
   const [phaseIndex, setPhaseIndex] = useState(0);
   const [coreState, setCoreState] = useState('idle');
   const bottomRef = useRef(null);
+  const triggeredRef = useRef(false);
   const showSuggestions = messages.length === 1 && messages[0]?.id === 'seed';
 
   const handleClearHistory = async () => {
@@ -155,10 +158,16 @@ export default function Assistant() {
       window.localStorage.removeItem('cloudiq-ui-overrides');
       const root = document.documentElement;
       root.style.cssText = "";
-      root.classList.add('dark');
-      root.setAttribute('data-theme', 'dark');
+      if (theme === 'light') {
+        root.classList.remove('dark');
+        root.setAttribute('data-theme', 'light');
+      } else {
+        root.classList.add('dark');
+        root.setAttribute('data-theme', 'dark');
+      }
       document.body.style.fontFamily = "";
     }
+    triggeredRef.current = false;
     setMessages([{ id: 'seed', role: 'assistant', text: copy.assistantGreeting, tools: [] }]);
     try {
       const API_BASE = import.meta.env.VITE_BACKEND_URL || '';
@@ -182,6 +191,14 @@ export default function Assistant() {
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, sending]);
+
+  useEffect(() => {
+    if (location.state?.autoMessage && !triggeredRef.current) {
+      triggeredRef.current = true;
+      handleSend(location.state.autoMessage);
+      window.history.replaceState({}, document.title);
+    }
+  }, [location.state]);
 
   useEffect(() => {
     if (!sending) return undefined;

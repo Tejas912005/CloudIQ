@@ -1,7 +1,7 @@
 """
 routers/chat.py
 ---------------
-POST /api/chat — AI-powered cloud assistant endpoint.
+POST /api/chat â€” AI-powered cloud assistant endpoint.
 Connects to the agentic chat controller which uses Gemini + fallback.
 """
 
@@ -25,6 +25,58 @@ router = APIRouter(prefix="/api", tags=["Chat"])
 
 
 
+
+
+def check_resource_action(message: str, db: Session):
+    """
+    Check if the user is asking to stage a specific recommendation action
+    on a specific resource. Returns action details if match found.
+    """
+    from models.models import CloudResource
+    lower = message.lower()
+    
+    # Extract action type
+    is_terminate = any(kw in lower for kw in ["terminate", "stop", "kill", "shut down", "delete"])
+    is_scale = any(kw in lower for kw in ["scale", "upgrade", "downsize", "resize"])
+    is_disable_public = any(kw in lower for kw in ["disable public", "restrict public", "block public", "remove public"])
+    
+    if not (is_terminate or is_scale or is_disable_public):
+        return None
+        
+    # Find matching resource name in message
+    resources = db.query(CloudResource).all()
+    for r in resources:
+        if r.name.lower() in lower:
+            # We found a match!
+            if is_terminate:
+                cost_saving = r.monthly_cost or 0.0
+                return {
+                    "type": "terminate",
+                    "resource": r,
+                    "title": f"Terminate {r.name}",
+                    "description": f"This will safely terminate the single idle resource '{r.name}' in {r.region}. Estimated savings: ${cost_saving:,.2f}/month.",
+                    "actionId": f"term_res_{r.id}",
+                    "text": f"I found the idle resource '{r.name}'. Please approve the execution card to terminate it and save ${cost_saving:,.2f}/month."
+                }
+            elif is_scale:
+                return {
+                    "type": "scale",
+                    "resource": r,
+                    "title": f"Scale / Resize {r.name}",
+                    "description": f"This will resize or scale '{r.name}' to optimize cost and prevent performance saturation.",
+                    "actionId": f"scale_res_{r.id}",
+                    "text": f"I analyzed '{r.name}'. Please approve the execution card to scale/resize it."
+                }
+            elif is_disable_public:
+                return {
+                    "type": "disable_public",
+                    "resource": r,
+                    "title": f"Disable Public Access for {r.name}",
+                    "description": f"This will restrict public network access for '{r.name}' and move it to a private subnet.",
+                    "actionId": f"secure_res_{r.id}",
+                    "text": f"I identified public access exposure on '{r.name}'. Please approve the execution card to secure it."
+                }
+    return None
 
 
 def extract_json_commands(text: str) -> list:
@@ -73,30 +125,63 @@ def extract_json_commands(text: str) -> list:
 @router.post("/chat", response_model=ChatResponse, dependencies=[Depends(verify_api_key)])
 def chat_endpoint(req: ChatRequest, db: Session = Depends(get_db)):
     """
-    AI Cloud Assistant — powered by Gemini 1.5 Flash with local fallback.
+    AI Cloud Assistant â€” powered by Gemini 1.5 Flash with local fallback.
     Supports: cost analysis, anomaly detection, predictions, risk analysis,
     graph-based blast radius, attack paths, recommendations, and free-form Q&A.
     """
     try:
-        # Import chat controller (from agents layer)
-        from agents.chat_controller import chat
+        message = req.message.strip()
+        intent = _resolve_intent(message)
 
-        result = chat(req.message, db)
+        # Check for specific resource actions
+        res_action = check_resource_action(message, db)
+        if res_action:
+            full_response = res_action["text"]
+        elif intent == "navigate_globe":
+            full_response = "Initiating Agentic UI Control... Navigating to Globe View."
+        elif intent == "navigate_graph":
+            full_response = "Initiating Agentic UI Control... Navigating to Graph View."
+        elif intent == "terminate_idle":
+            idle_resources = db.query(CloudResource).filter(CloudResource.status == "Idle").all()
+            idle_count = len(idle_resources)
+            real_savings = round(sum((r.monthly_cost or 0) * 0.95 for r in idle_resources), 2)
+            full_response = f"I have identified {idle_count} idle resources. Please approve the execution card to terminate them and save ${real_savings:,.2f}/month."
+        elif intent in ["stop_risky_resources", "stop_overutilized_resources"]:
+            full_response = "I found 5 high-risk over-utilized resources. Please approve the execution card to stop them and reduce risk."
+        else:
+            if intent == "agent_mode":
+                from agents.chat_controller import _run_agent_loop
+                context_data = _run_agent_loop(message, db)
+            else:
+                context_data = _get_context_data(intent, db)
+                
+            history = _load_history(db, intent=intent)
+            
+            from services.langchain_router import stream_routed_response
+            full_response = ""
+            try:
+                for chunk in stream_routed_response(message, history, context_data, intent=intent, db=db):
+                    full_response += chunk
+            except Exception as stream_err:
+                logger.error(f"[CHAT] stream failed, using local fallback: {stream_err}")
+                from local_fallback import generate_local_response, infer_intent_from_keywords
+                fallback_intent = infer_intent_from_keywords(message)
+                full_response = generate_local_response(message, fallback_intent, context_data, db=db)
 
         # Persist to ChatLog table
-        db.add(ChatLog(role="user",  message=req.message, intent=result.get("intent"), mode=result.get("mode")))
-        db.add(ChatLog(role="model", message=result.get("response", ""), intent=result.get("intent"), mode=result.get("mode")))
+        db.add(ChatLog(role="user",  message=message, intent=intent, mode="gemini"))
+        db.add(ChatLog(role="model", message=full_response, intent=intent, mode="gemini"))
         try:
             db.commit()
         except Exception:
             db.rollback()
 
-        logger.info(f"[CHAT] intent={result.get('intent')} mode={result.get('mode')}")
+        logger.info(f"[CHAT] intent={intent} mode=gemini")
         return ChatResponse(
-            response=result.get("response", ""),
-            intent=result.get("intent", "none"),
-            status=result.get("status", "ok"),
-            mode=result.get("mode", "local_fallback"),
+            response=full_response,
+            intent=intent,
+            status="ok",
+            mode="gemini",
         )
 
     except Exception as e:
@@ -124,6 +209,22 @@ def chat_stream_endpoint(req: ChatRequest, db: Session = Depends(get_db)):
 
         intent = _resolve_intent(message)
         
+        # Check for specific resource actions
+        res_action = check_resource_action(message, db)
+        if res_action:
+            yield event({"type": "thinking", "intent": intent})
+            yield event({"type": "token", "text": res_action["text"] + "\n\n"})
+            yield event({
+                "type": "action", 
+                "command": "execute_tool", 
+                "title": res_action["title"],
+                "description": res_action["description"],
+                "actionId": res_action["actionId"],
+                "endpoint": "/api/agent/execute"
+            })
+            yield event({"type": "done", "intent": intent})
+            return
+        
         if intent == "agent_mode":
             from agents.chat_controller import _run_agent_loop
             context_data = _run_agent_loop(message, db)
@@ -148,12 +249,17 @@ def chat_stream_endpoint(req: ChatRequest, db: Session = Depends(get_db)):
             return
 
         elif intent == "terminate_idle":
-            yield event({"type": "token", "text": "I have identified 5 idle resources. Please approve the execution card to terminate them and save $320/month.\n\n"})
+            idle_resources = db.query(CloudResource).filter(CloudResource.status == "Idle").all()
+            idle_count = len(idle_resources)
+            real_savings = round(sum((r.monthly_cost or 0) * 0.95 for r in idle_resources), 2)
+            regions = list({r.region for r in idle_resources})
+            region_str = f"{len(regions)} region{'s' if len(regions) != 1 else ''}"
+            yield event({"type": "token", "text": f"I have identified {idle_count} idle resources. Please approve the execution card to terminate them and save ${real_savings:,.2f}/month.\n\n"})
             yield event({
                 "type": "action", 
                 "command": "execute_tool", 
                 "title": "Terminate Idle Resources",
-                "description": "This will safely terminate 5 identified idle instances across 3 regions. Estimated savings: $320/month.",
+                "description": f"This will safely terminate {idle_count} identified idle instances across {region_str}. Estimated savings: ${real_savings:,.2f}/month.",
                 "actionId": "term_idle_123",
                 "endpoint": "/api/agent/execute"
             })
@@ -214,7 +320,7 @@ def chat_stream_endpoint(req: ChatRequest, db: Session = Depends(get_db)):
         full_buffer = ""
         stream_buffer = ""
         try:
-            for chunk in stream_routed_response(message, history, context_data, intent=intent):
+            for chunk in stream_routed_response(message, history, context_data, intent=intent, db=db):
                 stream_buffer += chunk
                 
                 # Parse completed blocks from the stream_buffer
@@ -256,7 +362,7 @@ def chat_stream_endpoint(req: ChatRequest, db: Session = Depends(get_db)):
             logger.error(f"[CHAT/STREAM] AI stream failed, using local fallback: {stream_err}")
             from local_fallback import generate_local_response, infer_intent_from_keywords
             fallback_intent = infer_intent_from_keywords(message)
-            fallback_text = generate_local_response(message, fallback_intent, context_data)
+            fallback_text = generate_local_response(message, fallback_intent, context_data, db=db)
             full_buffer = fallback_text
             yield event({"type": "token", "text": fallback_text})
 
@@ -304,7 +410,9 @@ def execute_agent_action(action: AgentAction, db: Session = Depends(get_db)):
         "mark_high_risk_review_123", # mark top risks for review (no termination)
     }
 
-    if action.actionId not in allowed_action_ids:
+    is_dynamic = action.actionId.startswith("term_res_") or action.actionId.startswith("scale_res_") or action.actionId.startswith("secure_res_")
+
+    if action.actionId not in allowed_action_ids and not is_dynamic:
         return {
             "status": "error",
             "message": (
@@ -315,16 +423,67 @@ def execute_agent_action(action: AgentAction, db: Session = Depends(get_db)):
         }
 
     # Simulated action mutations only (no real cloud operations)
+    if action.actionId.startswith("term_res_") or action.actionId.startswith("scale_res_") or action.actionId.startswith("secure_res_"):
+        parts = action.actionId.split("_")
+        try:
+            res_id = int(parts[-1])
+        except ValueError:
+            return {"status": "error", "message": "Invalid resource ID in action ID"}
+            
+        res = db.query(CloudResource).filter(CloudResource.id == res_id).first()
+        if not res:
+            return {"status": "error", "message": f"Resource with ID {res_id} not found"}
+            
+        if action.actionId.startswith("term_res_"):
+            res.status = "Terminated"
+            try:
+                db.commit()
+                return {
+                    "status": "success",
+                    "message": f"Successfully terminated the single idle resource '{res.name}' (saved ${res.monthly_cost:,.2f}/mo)."
+                }
+            except Exception as e:
+                db.rollback()
+                return {"status": "error", "message": str(e)}
+                
+        elif action.actionId.startswith("scale_res_"):
+            res.status = "Healthy"
+            res.cpu_usage = 45.0
+            res.memory_usage = 50.0
+            try:
+                db.commit()
+                return {
+                    "status": "success",
+                    "message": f"Successfully scaled and right-sized resource '{res.name}' to optimized CPU and memory tiers."
+                }
+            except Exception as e:
+                db.rollback()
+                return {"status": "error", "message": str(e)}
+                
+        elif action.actionId.startswith("secure_res_"):
+            res.public_access = False
+            try:
+                db.commit()
+                return {
+                    "status": "success",
+                    "message": f"Successfully disabled public access for '{res.name}'. VPC security groups updated."
+                }
+            except Exception as e:
+                db.rollback()
+                return {"status": "error", "message": str(e)}
+
+    # Simulated action mutations only (no real cloud operations)
     if action.actionId == "term_idle_123":
-        # Simulate terminating the idle resources
-        idle_resources = db.query(CloudResource).filter(CloudResource.status == "Idle").limit(5).all()
+        # Terminate all idle resources and compute real savings
+        idle_resources = db.query(CloudResource).filter(CloudResource.status == "Idle").all()
+        real_savings = round(sum((r.monthly_cost or 0) * 0.95 for r in idle_resources), 2)
         for res in idle_resources:
             res.status = "Terminated"
         try:
             db.commit()
             return {
                 "status": "success",
-                "message": f"Successfully terminated {len(idle_resources)} idle resources. Estimated savings: $320/month."
+                "message": f"Successfully terminated {len(idle_resources)} idle resources. Estimated savings: ${real_savings:,.2f}/month."
             }
         except Exception as e:
             db.rollback()

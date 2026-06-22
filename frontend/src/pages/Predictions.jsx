@@ -278,9 +278,9 @@ export default function Predictions() {
               90-Day History + 30-Day Forecast
             </h3>
             <div style={{ display: 'flex', gap: 16, fontSize: 11 }}>
-              <span style={{ color: '#3b82f6' }}>● Actual</span>
-              <span style={{ color: '#8b5cf6' }}>● Fitted</span>
-              <span style={{ color: 'var(--success)' }}>● Forecast</span>
+              <span style={{ color: '#3b82f6' }}>â— Actual</span>
+              <span style={{ color: '#8b5cf6' }}>â— Fitted</span>
+              <span style={{ color: 'var(--success)' }}>â— Forecast</span>
             </div>
           </div>
 

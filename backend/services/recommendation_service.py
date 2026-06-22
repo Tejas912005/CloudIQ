@@ -195,14 +195,13 @@ def generate_recommendations(db: Session) -> Dict:
     # Persist to DB — clear old, bulk insert new
     db.query(Recommendation).delete()
     if all_recs:
+        # Build name-to-id map to prevent N+1 query loop
+        name_to_id = {r.name: r.id for r in db.query(CloudResource.name, CloudResource.id).all()}
         db.bulk_insert_mappings(
             Recommendation,
             [
                 dict(
-                    resource_id=db.query(CloudResource)
-                                   .filter(CloudResource.name == rec["resource_name"])
-                                   .with_entities(CloudResource.id)
-                                   .scalar(),
+                    resource_id=name_to_id.get(rec["resource_name"]),
                     resource_name=rec["resource_name"],
                     resource_type=rec.get("resource_type"),
                     action=rec["action"],

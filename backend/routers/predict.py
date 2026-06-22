@@ -36,6 +36,8 @@ def predict(db: Session = Depends(get_db)):
             monthly_forecast=data["monthly_forecast"],
             trend_direction=data["trend_direction"],
             resource_risks=data["resource_risks"],
+            confidence=data.get("confidence", 0.0),
+            r_squared=data.get("r_squared", 0.0),
         )
     except Exception as e:
         logger.error(f"[PREDICT] Error: {e}")

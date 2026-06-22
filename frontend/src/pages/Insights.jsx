@@ -30,9 +30,9 @@ export default function Insights() {
   if (error   && !platform) return <ErrorState title="Unavailable" message={error} onAction={refreshData} />;
   if (!platform)            return <EmptyState  title="No insights" message="Waiting for telemetry." />;
 
-  const anomalyDays = safeNumber(platform?.charts?.anomalyDays ?? platform?.rawSummary?.anomaly_days);
-  const overUtilized = safeNumber(platform?.rawSummary?.over_utilized_count);
-  const highRiskCount = safeNumber(platform?.rawSummary?.high_risk_count);
+  const anomalyDays = safeNumber(platform?.rawSummary?.anomalies?.total_anomaly_days);
+  const overUtilized = safeNumber(platform?.rawSummary?.resources?.over_utilized_count);
+  const highRiskCount = safeNumber(platform?.rawSummary?.graph?.high_risk_nodes);
 
   return (
     <div className="mx-auto flex max-w-[1600px] flex-col gap-5 animate-fade">

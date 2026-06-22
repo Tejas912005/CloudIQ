@@ -1,16 +1,16 @@
-"""
+﻿"""
 models/models.py
 ----------------
 Unified SQLAlchemy ORM models for CloudIQ v2.
 Merges CloudIQ's resource/cost tables with Cloud_Project's graph tables.
 All 7 entity types:
-  1. CloudResource     — EC2, RDS, S3, etc. with metrics + graph fields
-  2. ResourceConnection — Directed edges for the dependency graph
-  3. CostHistory       — Daily cost time-series (90 days simulated)
-  4. AnomalyRecord     — Persisted anomaly detections (cost + metric)
-  5. PredictionRecord  — Stored forecasts
-  6. Recommendation    — Prioritized action items with savings
-  7. ChatLog           — Conversation persistence (replaces in-memory)
+  1. CloudResource     â€” EC2, RDS, S3, etc. with metrics + graph fields
+  2. ResourceConnection â€” Directed edges for the dependency graph
+  3. CostHistory       â€” Daily cost time-series (90 days simulated)
+  4. AnomalyRecord     â€” Persisted anomaly detections (cost + metric)
+  5. PredictionRecord  â€” Stored forecasts
+  6. Recommendation    â€” Prioritized action items with savings
+  7. ChatLog           â€” Conversation persistence (replaces in-memory)
 """
 
 from datetime import datetime
@@ -22,9 +22,9 @@ from sqlalchemy.orm import relationship
 from core.database import Base
 
 
-# ══════════════════════════════════════════════════════════════════
+# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 #  1. CloudResource
-# ══════════════════════════════════════════════════════════════════
+# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 class CloudResource(Base):
     __tablename__ = "cloud_resources"
 
@@ -33,20 +33,20 @@ class CloudResource(Base):
     # Identity
     name            = Column(String(100), nullable=False)
     resource_uid    = Column(String(50), unique=True, index=True, nullable=False)
-    resource_type   = Column(String(50), nullable=False)   # EC2, RDS, S3, Lambda, VM…
+    resource_type   = Column(String(50), nullable=False)   # EC2, RDS, S3, Lambda, VMâ€¦
     provider        = Column(String(30), default="AWS")    # AWS | GCP | Azure
     region          = Column(String(50), default="us-east-1")
     status          = Column(String(20), default="Healthy") # Healthy | Idle | Over-Utilized
 
     # Cost
-    hourly_cost     = Column(Float, default=0.0)   # USD per hour
+    hourly_cost     = Column(Float, default=0.0)   # INR per hour
     monthly_cost    = Column(Float, default=0.0)   # pre-computed convenience field
 
-    # Operational metrics (latest snapshot — updated by simulator)
+    # Operational metrics (latest snapshot â€” updated by simulator)
     cpu_usage       = Column(Float, default=0.0)   # %
     memory_usage    = Column(Float, default=0.0)   # %
     uptime_hours    = Column(Float, default=0.0)
-    efficiency_score = Column(Float, default=0.0)  # 0–100
+    efficiency_score = Column(Float, default=0.0)  # 0â€“100
 
     # Extended telemetry
     latency_ms      = Column(Float, default=0.0)   # avg response latency
@@ -78,9 +78,9 @@ class CloudResource(Base):
     recommendations = relationship("Recommendation", back_populates="resource", cascade="all, delete-orphan")
 
 
-# ══════════════════════════════════════════════════════════════════
+# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 #  2. ResourceConnection  (graph edges)
-# ══════════════════════════════════════════════════════════════════
+# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 class ResourceConnection(Base):
     __tablename__ = "resource_connections"
 
@@ -97,9 +97,9 @@ class ResourceConnection(Base):
     target = relationship("CloudResource", foreign_keys=[target_id], back_populates="target_connections")
 
 
-# ══════════════════════════════════════════════════════════════════
+# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 #  3. CostHistory  (daily cost time-series)
-# ══════════════════════════════════════════════════════════════════
+# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 class CostHistory(Base):
     __tablename__ = "cost_history"
 
@@ -110,9 +110,9 @@ class CostHistory(Base):
     created_at  = Column(DateTime, default=datetime.utcnow)
 
 
-# ══════════════════════════════════════════════════════════════════
+# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 #  4. AnomalyRecord  (persisted detections)
-# ══════════════════════════════════════════════════════════════════
+# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 class AnomalyRecord(Base):
     __tablename__ = "anomaly_records"
 
@@ -130,9 +130,9 @@ class AnomalyRecord(Base):
     resource = relationship("CloudResource", back_populates="anomalies")
 
 
-# ══════════════════════════════════════════════════════════════════
+# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 #  5. PredictionRecord  (stored forecasts)
-# ══════════════════════════════════════════════════════════════════
+# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 class PredictionRecord(Base):
     __tablename__ = "prediction_records"
 
@@ -141,16 +141,16 @@ class PredictionRecord(Base):
     prediction_type = Column(String(50), default="cost")   # cost | risk
     target_date     = Column(String(10), nullable=False)
     predicted_value = Column(Float, nullable=False)
-    confidence      = Column(Float, default=0.8)   # 0.0–1.0
+    confidence      = Column(Float, default=0.8)   # 0.0â€“1.0
     trend_direction = Column(String(20), default="stable") # increasing | decreasing | stable
     created_at      = Column(DateTime, default=datetime.utcnow)
 
     resource = relationship("CloudResource", back_populates="predictions")
 
 
-# ══════════════════════════════════════════════════════════════════
+# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 #  6. Recommendation  (prioritized action items)
-# ══════════════════════════════════════════════════════════════════
+# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 class Recommendation(Base):
     __tablename__ = "recommendations"
 
@@ -168,9 +168,9 @@ class Recommendation(Base):
     resource = relationship("CloudResource", back_populates="recommendations")
 
 
-# ══════════════════════════════════════════════════════════════════
+# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 #  7. ChatLog  (conversation persistence)
-# ══════════════════════════════════════════════════════════════════
+# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 class ChatLog(Base):
     __tablename__ = "chat_logs"
 

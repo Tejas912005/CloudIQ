@@ -1,4 +1,4 @@
-import {
+﻿import {
   formatCompactNumber,
   formatCurrency,
   formatPercent,
@@ -184,7 +184,7 @@ export function buildCommandCenterModel(snapshot, language = 'en') {
   
   const predictions = predict || {};
   const costPredictions = predictions; // They are merged in predict endpoint
-  const history = predictions.historical || [];
+  const history = snapshot.history || [];
   const riskResources = predictions.resource_risks || [];
 
   const healthScore = Math.round(
@@ -270,20 +270,15 @@ export function buildCommandCenterModel(snapshot, language = 'en') {
     },
     {
       id: 'anomaly',
-      title: 'Anomaly Pulse',
-      value: anomalyCount
-        ? `+${formatCurrency(
-            average((anomalies.anomalies || []).map((item) => item.deviation || 0)),
-            { minimumFractionDigits: 0, maximumFractionDigits: 0 }
-          )}`
-        : 'Stable',
+      title: 'Anomaly Days',
+      value: anomalyCount ? `${anomalyCount} day${anomalyCount === 1 ? '' : 's'}` : '0 days',
       rawValue: anomalyCount,
-      delta: anomalyCount > 5 ? 'Above threshold' : 'Within normal',
+      delta: anomalyCount > 5 ? 'Needs review' : 'Normal range',
       trend: anomalyCount > 5 ? 'increasing' : 'stable',
       sparkData: [0, 1, 0, 2, anomalyCount > 0 ? anomalyCount - 1 : 0, anomalyCount > 0 ? anomalyCount + 1 : 0, anomalyCount],
       detail: anomalyCount
-        ? 'Average deviation across detected spend spikes.'
-        : 'No major spend spikes detected in the current window.',
+        ? 'Number of days with unusual spend movement in the current window.'
+        : 'No unusual spend days detected in the current window.',
       tone: 'from-amber-400/25 via-cyan-400/10 to-transparent',
     },
   ];
@@ -345,9 +340,15 @@ export function buildCommandCenterModel(snapshot, language = 'en') {
         priority: recommendation.priority,
         impactValue,
         impactLabel:
-          recommendation.estimated_savings >= 0
+          recommendation.estimated_savings > 0
             ? `${impactValue}/month modeled recovery`
-            : `${impactValue}/month cost delta for resilience`,
+            : recommendation.estimated_savings < 0
+              ? `${impactValue}/month cost delta for resilience`
+              : recommendation.category === 'security'
+                ? 'No cost impact (Security improvement)'
+                : recommendation.category === 'graph'
+                  ? 'No cost impact (Network resilience)'
+                  : 'No cost impact (Operational focus)',
         riskLevel:
           recommendation.priority === 'High'
             ? 'Immediate'
@@ -419,6 +420,7 @@ export function buildCommandCenterModel(snapshot, language = 'en') {
       })),
       statusBreakdown: resourceStatus,
       usageBands,
+      spendDelta: predictedCost - beforeCost,
     },
     costStory,
     recommendations: recommendationCards,
