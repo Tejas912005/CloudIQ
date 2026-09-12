@@ -49,7 +49,7 @@ class Settings:
     DEBUG: bool = os.environ.get("DEBUG", "true").lower() == "true"
     CORS_ORIGINS: list = [
         o.strip() for o in 
-        os.environ.get("CORS_ORIGINS", "http://localhost:5173,http://localhost:3000").split(",")
+        os.environ.get("CORS_ORIGINS", "http://localhost:5173,http://localhost:3000,https://cloud-iq.vercel.app,https://cloudiq.vercel.app").split(",")
     ]
 
     @property
