@@ -3,7 +3,7 @@ import { useLocation } from 'react-router-dom';
 import { UploadCloud } from 'lucide-react';
 import { CheckCircle2, Loader2, SendHorizonal, ShieldAlert, Trash2 } from 'lucide-react';
 import { AnimatePresence, motion as Motion } from 'framer-motion';
-import { getErrorMessage } from '../lib/api';
+import { fetchJson, getErrorMessage, getApiBase } from '../lib/api';
 import {
   extractToolUsage,
   stripToolUsage,
@@ -48,7 +48,7 @@ function ActionCard({ card }) {
 
   const execute = async () => {
     setStatus('executing');
-    const API_BASE = import.meta.env.VITE_BACKEND_URL || '';
+    const API_BASE = getApiBase();
     try {
       const res = await fetch(`${API_BASE}${card.endpoint}`, {
         method: 'POST',
@@ -170,7 +170,7 @@ export default function Assistant() {
     triggeredRef.current = false;
     setMessages([{ id: 'seed', role: 'assistant', text: copy.assistantGreeting, tools: [] }]);
     try {
-      const API_BASE = import.meta.env.VITE_BACKEND_URL || '';
+      const API_BASE = getApiBase();
       await fetch(`${API_BASE}/api/chat/clear`, {
         method: 'POST',
         headers: {
@@ -236,7 +236,7 @@ export default function Assistant() {
 
   // Used by the upload UI (file picker / drag-drop) to call the backend upload endpoint.
   const uploadToBackend = async (file) => {
-    const API_BASE = import.meta.env.VITE_BACKEND_URL || '';
+    const API_BASE = getApiBase();
     const form = new FormData();
     form.append('file', file);
 
@@ -283,7 +283,7 @@ export default function Assistant() {
     });
     setSending(true);
 
-    const API_BASE = import.meta.env.VITE_BACKEND_URL || '';
+    const API_BASE = getApiBase();
     try {
       const response = await fetch(`${API_BASE}/api/chat/stream`, {
         method: 'POST',

@@ -1,6 +1,12 @@
+export function getApiBase() {
+  const raw = import.meta.env.VITE_BACKEND_URL || '';
+  return raw.replace(/\/+$/, '');
+}
+
 export async function fetchJson(path, options = {}) {
-  const API_BASE = import.meta.env.VITE_BACKEND_URL || '';
-  const url = path.startsWith('/api') ? `${API_BASE}${path}` : path;
+  const API_BASE = getApiBase();
+  const cleanPath = path.startsWith('/') ? path : `/${path}`;
+  const url = path.startsWith('http') ? path : `${API_BASE}${cleanPath}`;
   
   const response = await fetch(url, {
     ...options,
