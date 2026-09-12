@@ -68,7 +68,7 @@ def export_pdf(db: Session = Depends(get_db)):
                               fontSize=9, textColor=colors.HexColor("#94a3b8"))
         generated = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
 
-        story.append(Paragraph("â˜  CloudIQ Dashboard Report", H1))
+        story.append(Paragraph("CloudIQ Dashboard Report", H1))
         story.append(Paragraph(f"Generated: {generated}", BODY))
         story.append(HRFlowable(width="100%", thickness=1,
                                 color=colors.HexColor("#1e3a5f"), spaceAfter=12))
@@ -102,7 +102,7 @@ def export_pdf(db: Session = Depends(get_db)):
             story.append(Paragraph("Active Recommendations", H2))
             rec_data = [["Resource", "Action", "Priority", "Est. Savings"]]
             for r in recs:
-                savings = f"${r.estimated_savings:,.2f}" if r.estimated_savings else "â€”"
+                savings = f"${r.estimated_savings:,.2f}" if r.estimated_savings else "-"
                 rec_data.append([r.resource_name, r.action[:60], r.priority, savings])
             story.append(_make_table(rec_data))
             story.append(Spacer(1, 0.4*cm))
@@ -115,7 +115,7 @@ def export_pdf(db: Session = Depends(get_db)):
                 hist_data.append([
                     ch.date,
                     f"${ch.daily_cost:,.2f}",
-                    "âš  Yes" if ch.is_anomaly else "âœ“ No",
+                    "Yes" if ch.is_anomaly else "No",
                 ])
             story.append(_make_table(hist_data))
 
@@ -131,7 +131,7 @@ def export_pdf(db: Session = Depends(get_db)):
         raise HTTPException(status_code=500, detail=f"PDF generation failed: {str(e)}")
 
 
-def _make_table(data: list) -> "Table":
+def _make_table(data: list):
     """Helper: styled table for PDF output."""
     from reportlab.platypus import Table, TableStyle
     from reportlab.lib import colors

@@ -201,7 +201,6 @@ def generate_local_response(message: str, intent: str, context_data=None, db: Se
     if message_lower in ["hi", "hello", "hey", "hii", "hey there", "good morning", "good afternoon", "yo"]:
         return (
             "Hello! I am CloudIQ, your AI-powered cloud intelligence assistant. "
-            "Although my primary AI connection is temporarily offline, I can still help you analyze your cloud infrastructure! "
             "How can I help you today? You can ask me to:\n"
             "- Analyze cloud resource utilization\n"
             "- Detect cost anomalies or spikes\n"

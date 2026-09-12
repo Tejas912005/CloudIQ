@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HTML5 Geolocation Test Page</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            max-width: 600px;
+            margin: 40px auto;
+            padding: 20px;
+            background-color: #f4f7f6;
+            color: #333;
+        }
+        .card {
+            background: white;
+            padding: 30px;
+            border-radius: 12px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.05);
+        }
+        h1 { margin-top: 0; color: #111; font-size: 24px; }
+        button {
+            background-color: #0070f3;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            font-size: 16px;
+            font-weight: 600;
+            border-radius: 7px;
+            cursor: pointer;
+            transition: background 0.2s;
+            width: 100%;
+        }
+        button:hover { background-color: #0051cb; }
+        button:disabled { background-color: #ccc; cursor: not-allowed; }
+        .result-box {
+            margin-top: 25px;
+            padding: 15px;
+            background: #fafafa;
+            border-left: 4px solid #0070f3;
+            border-radius: 4px;
+            display: none;
+        }
+        .error { border-left-color: #ff0033; background: #fff5f5; color: #cc0000; }
+        .success { border-left-color: #00cc66; background: #f5fff9; }
+        .data-item { margin: 8px 0; font-size: 15px; }
+        .label { font-weight: bold; color: #555; }
+    </style>
+</head>
+<body>
+
+<div class="card">
+    <h1>HTML5 Geolocation Test</h1>
+    <p>Click the button below to test your browser's Geolocation API performance.</p>
+    <button id="geo-btn" onclick="getTestLocation()">Determine My Location</button>
+
+    <div id="output" class="result-box"></div>
+</div>
+
+<script>
+function getTestLocation() {
+    const output = document.getElementById("output");
+    const button = document.getElementById("geo-btn");
+    
+    output.style.display = "block";
+    output.className = "result-box";
+    output.innerHTML = "<em>Requesting permission and fetching coordinates...</em>";
+    button.disabled = true;
+
+    // Feature Detection
+    if (!navigator.geolocation) {
+        output.className = "result-box error";
+        output.innerHTML = "<strong>Error:</strong> Geolocation is not supported by this browser.";
+        button.disabled = false;
+        return;
+    }
+
+    // Call Geolocation API
+    navigator.geolocation.getCurrentPosition(showSuccess, showError, {
+        enableHighAccuracy: true,
+        timeout: 10000,
+        maximumAge: 0
+    });
+
+    function showSuccess(position) {
+        button.disabled = false;
+        output.className = "result-box success";
+        
+        const timestamp = new Date(position.timestamp).toLocaleString();
+        
+        output.innerHTML = `
+            <div class="data-item"><span class="label">Status:</span> Success</div>
+            <div class="data-item"><span class="label">Latitude:</span> ${position.coords.latitude}°</div>
+            <div class="data-item"><span class="label">Longitude:</span> ${position.coords.longitude}°</div>
+            <div class="data-item"><span class="label">Accuracy:</span> ~${Math.round(position.coords.accuracy)} meters</div>
+            <div class="data-item"><span class="label">Altitude:</span> ${position.coords.altitude !== null ? position.coords.altitude + ' m' : 'Not available'}</div>
+            <div class="data-item"><span class="label">Timestamp:</span> ${timestamp}</div>
+            <div class="data-item" style="margin-top:15px;">
+                <a href="https://google.com{position.coords.latitude},${position.coords.longitude}" target="_blank" style="color:#0070f3; font-weight:bold; text-decoration:none;">🌐 View on Google Maps →</a>
+            </div>
+        `;
+    }
+
+    function showError(error) {
+        button.disabled = false;
+        output.className = "result-box error";
+        
+        let errorMsg = "";
+        switch(error.code) {
+            case error.PERMISSION_DENIED:
+                errorMsg = "User denied the request for Geolocation.";
+                break;
+            case error.POSITION_UNAVAILABLE:
+                errorMsg = "Location information is unavailable.";
+                break;
+            case error.TIMEOUT:
+                errorMsg = "The request to get user location timed out.";
+                break;
+            case error.UNKNOWN_ERROR:
+                errorMsg = "An unknown error occurred.";
+                break;
+        }
+        output.innerHTML = `<strong>Error (${error.code}):</strong> ${errorMsg}`;
+    }
+}
+</script>
+
+</body>
+</html>
