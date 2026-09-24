@@ -234,7 +234,6 @@ export default function Assistant() {
     ? String(pendingUpload.extracted_text).trim()
     : '';
 
-  // Used by the upload UI (file picker / drag-drop) to call the backend upload endpoint.
   const uploadToBackend = async (file) => {
     const API_BASE = getApiBase();
     const form = new FormData();
@@ -258,7 +257,6 @@ export default function Assistant() {
   const handleSend = async (seedText) => {
     let message = (seedText || input).trim();
 
-    // If a file was uploaded, prepend extracted text so the assistant can use it.
     if (pendingExtractedText) {
       message = `Uploaded file content (extracted):\n${pendingExtractedText}\n\nUser request:\n${message || ''}`.trim();
       setPendingUpload(null);
@@ -266,7 +264,6 @@ export default function Assistant() {
 
     if (!message) return;
 
-    // Update input state early so UI feels responsive
     setInput('');
 
     updateLanguageFromMessage(message);
@@ -329,7 +326,6 @@ export default function Assistant() {
             );
           }
 
-          // Agentic UI: Command Receiver
           if (payload.type === 'action') {
             if (payload.command === 'navigate' && payload.target) {
               setTimeout(() => { window.location.href = payload.target; }, 1500);
@@ -349,7 +345,6 @@ export default function Assistant() {
               }
             }
 
-            // Universal Agentic UI Control
             if (payload.command === 'ui_control' && payload.payload) {
               const cmd = payload.payload;
               if (cmd.action === 'apply_css' && cmd.vars) {

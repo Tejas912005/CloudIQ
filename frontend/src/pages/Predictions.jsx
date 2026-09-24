@@ -135,7 +135,7 @@ export default function Predictions() {
 
   return (
     <div className="mx-auto flex max-w-[1600px] flex-col gap-5">
-      {/* Page header */}
+      
       <FadeUp>
         <div>
           <h2
@@ -160,7 +160,6 @@ export default function Predictions() {
         </div>
       </FadeUp>
 
-      {/* 4 metric cards in a row */}
       <StaggerParent className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         {[
           {
@@ -202,7 +201,7 @@ export default function Predictions() {
               className="card-lift p-5"
               style={{ position: 'relative', overflow: 'hidden' }}
             >
-              {/* Colored accent line at bottom */}
+              
               <div
                 style={{
                   position: 'absolute',
@@ -253,7 +252,6 @@ export default function Predictions() {
         ))}
       </StaggerParent>
 
-      {/* Historical chart */}
       <FadeUp delay={0.15}>
         <GlassPanel className="p-5">
           <div
@@ -371,7 +369,6 @@ export default function Predictions() {
         </GlassPanel>
       </FadeUp>
 
-      {/* Resource risk table */}
       <FadeUp delay={0.22}>
         <GlassPanel className="p-5">
           <h3
@@ -405,7 +402,7 @@ export default function Predictions() {
                     border: '1px solid var(--border)',
                   }}
                 >
-                  {/* Name */}
+                  
                   <div>
                     <p
                       style={{
@@ -419,7 +416,6 @@ export default function Predictions() {
                     <p style={{ fontSize: 11, color: 'var(--text-dim)' }}>{risk.type}</p>
                   </div>
 
-                  {/* Progress bar */}
                   <div>
                     <div
                       style={{
@@ -450,7 +446,6 @@ export default function Predictions() {
                     </p>
                   </div>
 
-                  {/* Badge */}
                   <div style={{ textAlign: 'right' }}>
                     <span
                       style={{

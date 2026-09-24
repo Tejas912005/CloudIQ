@@ -1,24 +1,10 @@
-"""
-tools.py
---------
-Agent tool resolver for the CloudIQ agentic loop.
-
-FIXED: No longer creates its own SessionLocal(). Instead accepts a db session
-passed in from the caller, keeping all operations in the same transaction
-as the parent request.
-"""
 from sqlalchemy.orm import Session
 from models.models import CloudResource
 from services.anomaly_service import get_full_anomaly_report
 from services.prediction_service import predict_costs, predict_resource_risk
 from services.recommendation_service import generate_recommendations
 
-
 def get_tool_data(intent_name: str, db: Session) -> dict:
-    """
-    Resolve an agent action name to structured service data.
-    Accepts the request-scoped db session — does NOT open its own connection.
-    """
     try:
         if intent_name == "analyze_resources":
             resources = db.query(CloudResource).all()

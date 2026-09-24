@@ -1,8 +1,3 @@
-"""
-routers/recommend.py
----------------------
-GET /api/recommend — Prioritized cloud optimization recommendations.
-"""
 
 import logging
 from fastapi import APIRouter, Depends
@@ -17,18 +12,8 @@ logger = logging.getLogger("cloudiq.router.recommend")
 
 router = APIRouter(prefix="/api", tags=["Recommend"])
 
-
 @router.get("/recommend", response_model=RecommendResponse, dependencies=[Depends(verify_api_key)])
 def recommend(db: Session = Depends(get_db)):
-    """
-    Intelligent recommendation engine combining:
-    - Cost optimization (idle shutdown, right-sizing, downsizing)
-    - Performance (scale-up, restart scheduling)
-    - Security (disable public access, IAM hardening)
-    - Graph-based (network segmentation, blast radius reduction)
-
-    Results are sorted: High → Medium → Low priority.
-    """
     try:
         data = generate_recommendations(db)
         logger.info(f"[RECOMMEND] count={data['count']} savings=${data['total_potential_savings']}")

@@ -30,7 +30,7 @@ function writeStorage(key, value) {
       try {
         window.localStorage.setItem(key, JSON.stringify(value.slice(-6)));
       } catch {
-        // Non-critical storage failure.
+        
       }
     }
   }
@@ -51,7 +51,6 @@ export const useCloudStore = create((set, get) => ({
   agentRuns: readStorage(RUNS_STORAGE_KEY, []),
   theme: readStorage('cloudiq-theme', 'dark'),
 
-  // ── Auth state ────────────────────────────────────────────────
   user: null,
   authLoading: true,
 
@@ -67,8 +66,7 @@ export const useCloudStore = create((set, get) => ({
     await supabase.auth.signOut();
     set({ user: null });
   },
-  // ──────────────────────────────────────────────────────────────
-
+  
   setLanguage: (lang) => {
     set({ language: lang });
     writeStorage(LANGUAGE_STORAGE_KEY, lang);

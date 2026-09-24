@@ -1,13 +1,3 @@
-"""
-services/prediction_service.py
---------------------------------
-Prediction service for CloudIQ v2.
-Upgraded from CloudIQ's predictor.py:
-  - Uses SQLAlchemy ORM
-  - Linear regression on cost history (30-day forecast)
-  - Resource risk scoring using metrics + graph context
-  - Persists PredictionRecord entries to DB
-"""
 
 import logging
 import numpy as np
@@ -19,16 +9,7 @@ from models.models import CostHistory, CloudResource, PredictionRecord
 
 logger = logging.getLogger("cloudiq.prediction_service")
 
-
-# ══════════════════════════════════════════════════════════════════════════════
-#  COST FORECAST  (Linear Regression, 30-day horizon)
-# ══════════════════════════════════════════════════════════════════════════════
-
 def predict_costs(db: Session) -> Dict:
-    """
-    Fit a linear regression model on CostHistory and forecast next 30 days.
-    Returns historical (actual + fitted) and predicted future points.
-    """
     rows = db.query(CostHistory).order_by(CostHistory.date).all()
 
     if not rows:
@@ -54,7 +35,6 @@ def predict_costs(db: Session) -> Dict:
         slope, intercept = 0.0, float(costs[0])
         r_squared, confidence = 1.0, 1.0
 
-    # Future 30 days
     future_X = np.arange(len(costs), len(costs) + 30).reshape(-1, 1)
     future_preds = (future_X.flatten() * slope) + intercept
 
@@ -68,8 +48,6 @@ def predict_costs(db: Session) -> Dict:
     slope = float(slope)
     monthly_total = float(np.sum(future_preds))
     trend_dir = "increasing" if slope > 0 else "decreasing"
-
-    # We removed db.query(PredictionRecord).delete() to avoid SQLite concurrent write locks
 
     logger.info(f"[PREDICT] Cost forecast: {trend_dir}, 30d total=${monthly_total:.2f}")
 
@@ -89,21 +67,7 @@ def predict_costs(db: Session) -> Dict:
         "r_squared":        round(r_squared, 4),
     }
 
-
-# ══════════════════════════════════════════════════════════════════════════════
-#  RESOURCE RISK PREDICTION  (metric-based scoring)
-# ══════════════════════════════════════════════════════════════════════════════
-
 def predict_resource_risk(db: Session) -> List[Dict]:
-    """
-    Score each resource based on operational metrics:
-      - High CPU (>85%) or Memory (>90%) → critical pressure
-      - Long uptime (>600h) → maintenance risk
-      - Low efficiency (<30) → waste + instability risk
-      - High latency (>500ms) → performance risk
-      - High error rate (>5%) → reliability risk
-    Returns top 10 highest-risk resources.
-    """
     resources = db.query(CloudResource).all()
     risks = []
 
@@ -144,13 +108,7 @@ def predict_resource_risk(db: Session) -> List[Dict]:
     logger.info(f"[PREDICT] Resource risks identified: {len(risks)} resources at risk")
     return risks[:10]
 
-
-# ══════════════════════════════════════════════════════════════════════════════
-#  COMBINED PREDICTION REPORT
-# ══════════════════════════════════════════════════════════════════════════════
-
 def get_full_prediction_report(db: Session) -> Dict:
-    """Combined cost forecast + resource risk prediction."""
     cost_pred    = predict_costs(db)
     resource_risk = predict_resource_risk(db)
     return {

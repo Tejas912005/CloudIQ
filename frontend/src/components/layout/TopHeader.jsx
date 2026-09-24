@@ -132,37 +132,6 @@ export default function TopHeader() {
               {theme === 'dark' ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
             </button>
 
-            {/* HIDDEN FOR VIVA — sign-in / user auth block
-            {user ? (
-              <div className="flex items-center gap-2">
-                <div
-                  className="flex h-[30px] w-[30px] items-center justify-center rounded-full"
-                  style={{ background: 'linear-gradient(135deg, var(--accent-solid), var(--accent-richer))' }}
-                >
-                  <User size={14} style={{ color: 'var(--text-on-accent)' }} />
-                </div>
-                <span
-                  className="hidden max-w-20 truncate text-[11px] sm:block"
-                  style={{ color: 'var(--text-muted)' }}
-                >
-                  {user.email?.split('@')[0]}
-                </span>
-                <button onClick={signOut} className="btn-icon h-7 w-7 !p-0" title="Sign out" type="button">
-                  <LogOut size={13} />
-                </button>
-              </div>
-            ) : (
-              <button
-                onClick={() => setShowAuth(true)}
-                className="btn-primary h-8 rounded-lg px-3.5 text-xs"
-                type="button"
-              >
-                <LogIn size={12} />
-                <span className="hidden sm:inline">Sign In</span>
-              </button>
-            )}
-            END HIDDEN */}
-
             <div className="hidden items-center gap-1.5 sm:flex" style={{ color: 'var(--text-dim)' }}>
               <RefreshCcw className={`h-3.5 w-3.5 ${loading ? 'animate-[spin_1s_linear_infinite]' : ''}`} />
               <span className="font-mono-data text-[11px]">Updated {formatRelativeMinutes(lastUpdated)}</span>

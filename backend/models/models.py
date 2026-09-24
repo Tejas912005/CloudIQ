@@ -21,46 +21,36 @@ from sqlalchemy import (
 from sqlalchemy.orm import relationship
 from core.database import Base
 
-
-# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
-#  1. CloudResource
-# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 class CloudResource(Base):
     __tablename__ = "cloud_resources"
 
     id              = Column(Integer, primary_key=True, index=True)
 
-    # Identity
     name            = Column(String(100), nullable=False)
     resource_uid    = Column(String(50), unique=True, index=True, nullable=False)
-    resource_type   = Column(String(50), nullable=False)   # EC2, RDS, S3, Lambda, VMâ€¦
-    provider        = Column(String(30), default="AWS")    # AWS | GCP | Azure
+    resource_type   = Column(String(50), nullable=False)
+    provider        = Column(String(30), default="AWS")
     region          = Column(String(50), default="us-east-1")
-    status          = Column(String(20), default="Healthy") # Healthy | Idle | Over-Utilized
+    status          = Column(String(20), default="Healthy")
 
-    # Cost
-    hourly_cost     = Column(Float, default=0.0)   # INR per hour
-    monthly_cost    = Column(Float, default=0.0)   # pre-computed convenience field
+    hourly_cost     = Column(Float, default=0.0)
+    monthly_cost    = Column(Float, default=0.0)
 
-    # Operational metrics (latest snapshot â€” updated by simulator)
-    cpu_usage       = Column(Float, default=0.0)   # %
-    memory_usage    = Column(Float, default=0.0)   # %
+    cpu_usage       = Column(Float, default=0.0)
+    memory_usage    = Column(Float, default=0.0)
     uptime_hours    = Column(Float, default=0.0)
-    efficiency_score = Column(Float, default=0.0)  # 0â€“100
+    efficiency_score = Column(Float, default=0.0)
 
-    # Extended telemetry
-    latency_ms      = Column(Float, default=0.0)   # avg response latency
-    error_rate      = Column(Float, default=0.0)   # % of requests failing
-    traffic_rps     = Column(Float, default=0.0)   # requests per second
+    latency_ms      = Column(Float, default=0.0)
+    error_rate      = Column(Float, default=0.0)
+    traffic_rps     = Column(Float, default=0.0)
 
-    # Graph / risk fields (from Cloud_Project)
-    sensitivity     = Column(String(10), default="Low")    # High | Medium | Low
+    sensitivity     = Column(String(10), default="Low")
     public_access   = Column(Boolean, default=False)
-    risk_score      = Column(Float, default=0.0)           # auto-computed by graph_service
+    risk_score      = Column(Float, default=0.0)
 
     created_at      = Column(DateTime, default=datetime.utcnow)
 
-    # Relationships
     source_connections = relationship(
         "ResourceConnection",
         foreign_keys="ResourceConnection.source_id",
@@ -77,80 +67,60 @@ class CloudResource(Base):
     predictions = relationship("PredictionRecord", back_populates="resource", cascade="all, delete-orphan")
     recommendations = relationship("Recommendation", back_populates="resource", cascade="all, delete-orphan")
 
-
-# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
-#  2. ResourceConnection  (graph edges)
-# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 class ResourceConnection(Base):
     __tablename__ = "resource_connections"
 
     id              = Column(Integer, primary_key=True, index=True)
-    from_node       = Column(String(50), nullable=False)   # resource_uid of source
-    to_node         = Column(String(50), nullable=False)   # resource_uid of target
+    from_node       = Column(String(50), nullable=False)
+    to_node         = Column(String(50), nullable=False)
     source_id       = Column(Integer, ForeignKey("cloud_resources.id"), nullable=True)
     target_id       = Column(Integer, ForeignKey("cloud_resources.id"), nullable=True)
-    connection_type = Column(String(50), default="network")  # network | dependency | data
+    connection_type = Column(String(50), default="network")
     risk_weight     = Column(Float, default=1.0)
     created_at      = Column(DateTime, default=datetime.utcnow)
 
     source = relationship("CloudResource", foreign_keys=[source_id], back_populates="source_connections")
     target = relationship("CloudResource", foreign_keys=[target_id], back_populates="target_connections")
 
-
-# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
-#  3. CostHistory  (daily cost time-series)
-# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 class CostHistory(Base):
     __tablename__ = "cost_history"
 
     id          = Column(Integer, primary_key=True, index=True)
-    date        = Column(String(10), nullable=False, index=True)  # YYYY-MM-DD
+    date        = Column(String(10), nullable=False, index=True)
     daily_cost  = Column(Float, nullable=False)
-    is_anomaly  = Column(Integer, default=0)   # 0 = normal, 1 = anomaly
+    is_anomaly  = Column(Integer, default=0)
     created_at  = Column(DateTime, default=datetime.utcnow)
 
-
-# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
-#  4. AnomalyRecord  (persisted detections)
-# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 class AnomalyRecord(Base):
     __tablename__ = "anomaly_records"
 
     id              = Column(Integer, primary_key=True, index=True)
     resource_id     = Column(Integer, ForeignKey("cloud_resources.id"), nullable=True)
-    anomaly_type    = Column(String(50), default="cost")  # cost | cpu | latency | error_rate
+    anomaly_type    = Column(String(50), default="cost")
     date            = Column(String(10), nullable=False)
     value           = Column(Float, nullable=False)
     z_score         = Column(Float, default=0.0)
     deviation       = Column(Float, default=0.0)
-    severity        = Column(String(20), default="medium")  # low | medium | high | critical
+    severity        = Column(String(20), default="medium")
     description     = Column(Text, nullable=True)
     created_at      = Column(DateTime, default=datetime.utcnow)
 
     resource = relationship("CloudResource", back_populates="anomalies")
 
-
-# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
-#  5. PredictionRecord  (stored forecasts)
-# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 class PredictionRecord(Base):
     __tablename__ = "prediction_records"
 
     id              = Column(Integer, primary_key=True, index=True)
     resource_id     = Column(Integer, ForeignKey("cloud_resources.id"), nullable=True)
-    prediction_type = Column(String(50), default="cost")   # cost | risk
+    prediction_type = Column(String(50), default="cost")
     target_date     = Column(String(10), nullable=False)
     predicted_value = Column(Float, nullable=False)
-    confidence      = Column(Float, default=0.8)   # 0.0â€“1.0
-    trend_direction = Column(String(20), default="stable") # increasing | decreasing | stable
+    confidence      = Column(Float, default=0.8)
+    trend_direction = Column(String(20), default="stable")
     created_at      = Column(DateTime, default=datetime.utcnow)
 
     resource = relationship("CloudResource", back_populates="predictions")
 
-
-# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
-#  6. Recommendation  (prioritized action items)
-# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 class Recommendation(Base):
     __tablename__ = "recommendations"
 
@@ -160,23 +130,19 @@ class Recommendation(Base):
     resource_type       = Column(String(50), nullable=True)
     action              = Column(Text, nullable=False)
     reason              = Column(Text, nullable=False)
-    priority            = Column(String(10), nullable=False, default="Medium")  # High | Medium | Low
-    category            = Column(String(30), default="cost")   # cost | security | performance | graph
+    priority            = Column(String(10), nullable=False, default="Medium")
+    category            = Column(String(30), default="cost")
     estimated_savings   = Column(Float, default=0.0)
     created_at          = Column(DateTime, default=datetime.utcnow)
 
     resource = relationship("CloudResource", back_populates="recommendations")
 
-
-# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
-#  7. ChatLog  (conversation persistence)
-# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 class ChatLog(Base):
     __tablename__ = "chat_logs"
 
     id          = Column(Integer, primary_key=True, index=True)
-    role        = Column(String(10), nullable=False)   # user | model
+    role        = Column(String(10), nullable=False)
     message     = Column(Text, nullable=False)
     intent      = Column(String(50), nullable=True)
-    mode        = Column(String(20), nullable=True)    # gemini | local_fallback
+    mode        = Column(String(20), nullable=True)
     created_at  = Column(DateTime, default=datetime.utcnow)

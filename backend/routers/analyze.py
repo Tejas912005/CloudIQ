@@ -1,9 +1,3 @@
-"""
-routers/analyze.py
--------------------
-GET /api/analyze — Full cloud infrastructure analysis.
-Returns resource summary + graph statistics + anomaly summary.
-"""
 
 import logging
 from datetime import datetime
@@ -21,17 +15,9 @@ logger = logging.getLogger("cloudiq.router.analyze")
 
 router = APIRouter(prefix="/api", tags=["Analyze"])
 
-
 @router.get("/analyze", response_model=AnalyzeResponse, dependencies=[Depends(verify_api_key)])
 def analyze(db: Session = Depends(get_db)):
-    """
-    Full cloud infrastructure analysis:
-    - Resource health summary (total, idle, over-utilized, healthy, cost)
-    - Graph topology statistics (nodes, edges, density, high-risk count)
-    - Cost anomaly summary (flagged days, mean, std)
-    """
     try:
-        # ── Resource summary ─────────────────────────────────────────────────
         resources = db.query(CloudResource).all()
         total   = len(resources)
         idle    = sum(1 for r in resources if r.status == "Idle")
@@ -47,12 +33,10 @@ def analyze(db: Session = Depends(get_db)):
             total_monthly_cost=round(total_cost, 2),
         )
 
-        # ── Graph stats ───────────────────────────────────────────────────────
         G = build_graph(db)
         stats = get_graph_stats(G)
         graph_stats = GraphStats(**stats)
 
-        # ── Anomaly summary ───────────────────────────────────────────────────
         anomaly_data = detect_cost_anomalies(db)
         anomaly_summary = AnomalySummary(
             total_anomaly_days=anomaly_data["total_anomaly_days"],

@@ -3,7 +3,6 @@ import ForceGraph2D from 'react-force-graph-2d';
 import { Network, MousePointerClick, Zap, CheckCircle2, ShieldAlert } from 'lucide-react';
 import { fetchJson } from '../lib/api';
 
-// â”€â”€â”€ Color mapping by risk level â€” resolved from CSS variables at runtime â”€â”€â”€â”€â”€
 function getRiskColors() {
   const s = typeof getComputedStyle !== 'undefined'
     ? getComputedStyle(document.documentElement)
@@ -31,7 +30,6 @@ export default function GraphView() {
   const containerRef = useRef(null);
   const fgRef = useRef();
 
-  // â”€â”€ Fetch graph data â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   useEffect(() => {
     fetchJson('/api/graph')
       .then(data => {
@@ -58,7 +56,6 @@ export default function GraphView() {
     return () => window.removeEventListener('resize', handleResize);
   }, [graphData]);
 
-  // â”€â”€ Handle node click: fetch blast radius â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const handleNodeClick = useCallback(async (node) => {
     if (selected?.id === node.id) {
       setSelected(null);
@@ -66,7 +63,6 @@ export default function GraphView() {
       return;
     }
     
-    // Center view on node
     if (fgRef.current) {
       fgRef.current.centerAt(node.x, node.y, 1000);
       fgRef.current.zoom(1.5, 1000);
@@ -91,26 +87,22 @@ export default function GraphView() {
     const r = Math.sqrt((node.val || 1)) * 5 + 4;
     const colors = RISK_COLORS[node.risk_level] || RISK_COLORS.Low;
 
-    // Glow for high-risk nodes
     if (node.risk_level === 'High') {
       ctx.shadowColor = colors.bg;
       ctx.shadowBlur = 16;
     }
 
-    // Draw circle
     ctx.beginPath();
     ctx.arc(node.x, node.y, r, 0, 2 * Math.PI);
     ctx.fillStyle = colors.bg;
     ctx.fill();
 
-    // Border ring
     ctx.strokeStyle = colors.border;
     ctx.lineWidth = 1.5;
     ctx.stroke();
 
     ctx.shadowBlur = 0;
 
-    // Node name label below circle
     const fontSize = Math.max(9, 11 / globalScale);
     ctx.font = `500 ${fontSize}px Inter, sans-serif`;
     ctx.textAlign = 'center';
@@ -120,7 +112,6 @@ export default function GraphView() {
       node.name?.length > 14 ? node.name.slice(0, 13) + 'â€¦' : node.name || '';
     ctx.fillText(label, node.x, node.y + r + 3);
   }, []);
-
 
   if (loading) {
     return (
@@ -145,7 +136,7 @@ export default function GraphView() {
 
   return (
     <div className="mx-auto max-w-[1600px] animate-fade space-y-4">
-      {/* ——— Header ——— */}
+      
       <div
         className="rounded-2xl border p-5"
         style={{ background: 'var(--surface)', borderColor: 'var(--border)' }}
@@ -157,7 +148,6 @@ export default function GraphView() {
           Click any node to simulate its blast radius. Nodes are colored by risk level.
         </p>
 
-        {/* Stats bar */}
         <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
           {[
             { label: 'Total Nodes',   value: stats.total_nodes ?? nodes.length },
@@ -180,7 +170,6 @@ export default function GraphView() {
           ))}
         </div>
 
-        {/* Legend */}
         <div className="mt-3 flex flex-wrap gap-4">
           {Object.entries(RISK_COLORS).map(([level, c]) => (
             <div key={level} className="flex items-center gap-1.5">
@@ -196,7 +185,7 @@ export default function GraphView() {
       </div>
 
       <div className="flex gap-4">
-        {/* â”€â”€ Graph Canvas â”€â”€ */}
+        
         <div
           ref={containerRef}
           className="relative flex-1 overflow-hidden rounded-2xl border cursor-move"
@@ -234,7 +223,6 @@ export default function GraphView() {
           )}
         </div>
 
-        {/* â”€â”€ Detail Panel â”€â”€ */}
         <div
           className="w-72 shrink-0 rounded-2xl border p-4 space-y-4"
           style={{ background: 'var(--surface)', borderColor: 'var(--border)' }}
@@ -265,7 +253,6 @@ export default function GraphView() {
                   </div>
                 </div>
 
-                {/* Risk badge */}
                 <span
                   className="inline-block rounded-full px-2.5 py-0.5 text-xs font-bold"
                   style={{
@@ -277,7 +264,6 @@ export default function GraphView() {
                 </span>
               </div>
 
-              {/* Metrics grid */}
               <div className="grid grid-cols-2 gap-2">
                 {[
                   { label: 'CPU', value: `${selected.cpu_usage?.toFixed(0)}%` },
@@ -300,7 +286,6 @@ export default function GraphView() {
                 ))}
               </div>
 
-              {/* Blast Radius */}
               <div>
                 <p className="text-xs font-semibold mb-2 flex items-center gap-1.5" style={{ color: 'var(--text-base)' }}>
                   <Zap size={13} style={{ color: '#a855f7' }} /> Blast Radius

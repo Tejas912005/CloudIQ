@@ -1,17 +1,3 @@
-"""
-data/simulator.py
-------------------
-Enhanced cloud data simulator for CloudIQ v2.
-Upgraded from data_generator.py to:
-  - Use SQLAlchemy ORM instead of raw sqlite3
-  - Add extended telemetry: latency_ms, error_rate, traffic_rps
-  - Add resource_uid for graph compatibility
-  - Seed ResourceConnection edges (EC2→RDS→S3 chains)
-  - Add sensitivity + public_access fields for graph risk scoring
-  - Phase 6: Multi-cloud provider diversity (AWS, GCP, Azure)
-  - Phase 6: Seasonal cost history with weekly patterns and spike events
-  - Phase 6: Correlated resource metrics (high CPU → higher latency/traffic)
-"""
 
 import math
 import random
@@ -21,8 +7,6 @@ from sqlalchemy.orm import Session
 
 from models.models import CloudResource, ResourceConnection, CostHistory
 
-
-# ── Phase 6: Multi-cloud provider configuration ─────────────────────────────
 PROVIDERS = ["AWS", "GCP", "Azure"]
 REGIONS = {
     "AWS":   ["us-east-1", "us-west-2", "eu-west-1", "ap-southeast-1", "ca-central-1"],
@@ -36,7 +20,6 @@ RESOURCE_TYPES_BY_PROVIDER = {
 }
 
 RESOURCE_CONFIGS = [
-    # (name, type, provider, region, sensitivity, public_access)
     ("web-server-prod",    "EC2",      "AWS",   "us-east-1",    "Low",    True),
     ("api-server-01",      "EC2",      "AWS",   "us-east-1",    "Medium", False),
     ("db-primary",         "RDS",      "AWS",   "us-east-1",    "High",   False),
@@ -69,41 +52,28 @@ RESOURCE_CONFIGS = [
     ("test-runner-01",     "EC2",      "AWS",   "ca-central-1", "Low",    False),
 ]
 
-# Realistic graph topology — (from_uid, to_uid, connection_type, risk_weight)
 GRAPH_EDGES = [
-    # Web → API → DB chain
-    ("RES-001", "RES-002", "network",    1.5),  # web-server → api-server
-    ("RES-002", "RES-003", "dependency", 2.0),  # api-server → db-primary
-    ("RES-002", "RES-004", "network",    1.0),  # api-server → cache-node
-    ("RES-003", "RES-011", "dependency", 1.5),  # db-primary → backup-server
-    # Load balancer → web servers
-    ("RES-028", "RES-001", "network",    1.0),  # load-balancer → web-server
-    ("RES-028", "RES-027", "network",    1.0),  # load-balancer → frontend
-    # Auth → downstream
-    ("RES-008", "RES-002", "dependency", 2.0),  # auth-service → api-server
-    ("RES-008", "RES-017", "dependency", 2.5),  # auth-service → payment-gateway
-    # Payment → DB
-    ("RES-017", "RES-003", "dependency", 2.5),  # payment-gateway → db-primary
-    ("RES-017", "RES-022", "dependency", 1.5),  # payment-gateway → billing-service
-    # ML pipeline (GCP)
-    ("RES-006", "RES-025", "data",       1.0),  # ml-training → data-pipeline
-    ("RES-025", "RES-026", "data",       1.0),  # data-pipeline → etl-processor
-    ("RES-026", "RES-011", "data",       1.5),  # etl-processor → backup-server
-    # Analytics (multi-cloud)
-    ("RES-002", "RES-014", "data",       1.0),  # api-server → analytics-db
-    # Queue → worker
-    ("RES-009", "RES-005", "network",    1.0),  # queue → worker-node
-    # Monitoring observing everything
+    ("RES-001", "RES-002", "network",    1.5),
+    ("RES-002", "RES-003", "dependency", 2.0),
+    ("RES-002", "RES-004", "network",    1.0),
+    ("RES-003", "RES-011", "dependency", 1.5),
+    ("RES-028", "RES-001", "network",    1.0),
+    ("RES-028", "RES-027", "network",    1.0),
+    ("RES-008", "RES-002", "dependency", 2.0),
+    ("RES-008", "RES-017", "dependency", 2.5),
+    ("RES-017", "RES-003", "dependency", 2.5),
+    ("RES-017", "RES-022", "dependency", 1.5),
+    ("RES-006", "RES-025", "data",       1.0),
+    ("RES-025", "RES-026", "data",       1.0),
+    ("RES-026", "RES-011", "data",       1.5),
+    ("RES-002", "RES-014", "data",       1.0),
+    ("RES-009", "RES-005", "network",    1.0),
     ("RES-024", "RES-001", "monitoring", 0.5),
     ("RES-024", "RES-003", "monitoring", 0.5),
     ("RES-024", "RES-017", "monitoring", 0.5),
 ]
 
-
-# ── Phase 6: Correlated metric simulation ───────────────────────────────────
-
 def simulate_resource_metrics(status: str) -> dict:
-    """Generate correlated metrics based on resource status."""
     if status == "Over-Utilized":
         cpu     = random.uniform(82, 98)
         mem     = random.uniform(78, 96)
@@ -116,7 +86,7 @@ def simulate_resource_metrics(status: str) -> dict:
         latency = random.uniform(8, 35)
         traffic = random.uniform(0.1, 3)
         error   = random.uniform(0, 0.3)
-    else:  # Healthy
+    else:
         cpu     = random.uniform(22, 68)
         mem     = random.uniform(28, 72)
         latency = random.uniform(40, 150)
@@ -128,7 +98,6 @@ def simulate_resource_metrics(status: str) -> dict:
         error_rate=round(error, 2),
     )
 
-
 def _compute_status(cpu: float, memory: float) -> str:
     if cpu < 10 and memory < 20:
         return "Idle"
@@ -136,33 +105,25 @@ def _compute_status(cpu: float, memory: float) -> str:
         return "Over-Utilized"
     return "Healthy"
 
-
 def _compute_efficiency(cpu: float, memory: float, uptime: float) -> float:
     cpu_score = max(0, 100 - abs(cpu - 65))
     mem_score = max(0, 100 - abs(memory - 65))
     uptime_score = min(100, uptime / 720 * 100)
     return round(cpu_score * 0.4 + mem_score * 0.4 + uptime_score * 0.2, 1)
 
-
 def seed_resources(db: Session) -> int:
-    """
-    Seed CloudResource table with 30 realistic cloud resources.
-    Includes multi-cloud provider diversity, extended telemetry, and correlated metrics.
-    """
     resources_created = 0
 
     for i, (name, rtype, provider, region, sensitivity, public_access) in enumerate(RESOURCE_CONFIGS):
         uid = f"RES-{i+1:03d}"
 
-        # Vary status based on position (create interesting variety)
-        if i < 6:          # First 6 are idle
+        if i < 6:
             status = "Idle"
-        elif i < 9:        # Next 3 are over-utilized
+        elif i < 9:
             status = "Over-Utilized"
-        else:              # Rest are healthy
+        else:
             status = "Healthy"
 
-        # Phase 6: use correlated metrics based on status
         metrics = simulate_resource_metrics(status)
         cpu    = metrics["cpu_usage"]
         memory = metrics["memory_usage"]
@@ -190,7 +151,7 @@ def seed_resources(db: Session) -> int:
             traffic_rps=metrics["traffic_rps"],
             sensitivity=sensitivity,
             public_access=public_access,
-            risk_score=0.0,  # Will be computed by graph_service
+            risk_score=0.0,
         )
         db.add(resource)
         resources_created += 1
@@ -198,9 +159,7 @@ def seed_resources(db: Session) -> int:
     db.commit()
     return resources_created
 
-
 def seed_connections(db: Session) -> int:
-    """Seed ResourceConnection edges using resource UIDs."""
     uid_to_id = {r.resource_uid: r.id for r in db.query(CloudResource).all()}
     edges_created = 0
 
@@ -209,7 +168,6 @@ def seed_connections(db: Session) -> int:
         tgt_id = uid_to_id.get(to_uid)
 
         if src_id and tgt_id and src_id != tgt_id:
-            # Check no duplicate
             existing = db.query(ResourceConnection).filter(
                 ResourceConnection.source_id == src_id,
                 ResourceConnection.target_id == tgt_id
@@ -228,33 +186,19 @@ def seed_connections(db: Session) -> int:
     db.commit()
     return edges_created
 
-
-# ── Phase 6A: Seasonal cost history ─────────────────────────────────────────
-
 def seed_cost_history(db: Session) -> int:
-    """
-    Seed 90 days of daily cost history with realistic patterns:
-    - Weekly seasonality: lower on weekends
-    - Monthly drift: slight upward trend
-    - Random daily variance: ±8%
-    - Occasional spikes: 2-3 per month (simulate traffic events)
-    """
     today = datetime.utcnow()
     days = 90
-    base_cost = 420.00  # starting daily spend
+    base_cost = 420.00
     spike_days = random.sample(range(days), k=max(2, days // 30 * 2))
     records_created = 0
 
     for i in range(days):
         date = (today - timedelta(days=days - i)).strftime("%Y-%m-%d")
-        # Upward trend: +4% per week — produces a clear rising slope
         trend = base_cost * (1 + 0.04 * (i / 7))
-        # Weekly seasonality: weekends cost 20% less (lower traffic)
         day_of_week = (today - timedelta(days=days - i)).weekday()
         seasonal = 0.80 if day_of_week >= 5 else 1.0
-        # Random variance ±15%
         variance  = random.uniform(0.85, 1.15)
-        # Traffic spike events
         spike     = random.uniform(1.4, 2.1) if i in spike_days else 1.0
 
         daily_cost = round(trend * seasonal * variance * spike, 2)
@@ -265,15 +209,9 @@ def seed_cost_history(db: Session) -> int:
     db.commit()
     return records_created
 
-
 def run_full_seed(db: Session) -> dict:
-    """
-    Clear all existing data and re-seed everything.
-    Called on startup by main.py.
-    """
     from sqlalchemy import text
 
-    # Clear tables in correct FK order
     db.execute(text("DELETE FROM chat_logs"))
     db.execute(text("DELETE FROM recommendations"))
     db.execute(text("DELETE FROM prediction_records"))

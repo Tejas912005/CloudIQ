@@ -1,20 +1,7 @@
-"""
-services/shared_utils.py
-------------------------
-Shared utility functions used by both gemini_service and groq_service.
-Centralising here eliminates the duplicate _build_context_prompt that
-previously existed in both service files.
-"""
 import json
 from typing import Optional
 
-
 def build_context_prompt(context_data: Optional[dict]) -> str:
-    """
-    Build the data-context string injected into every LLM prompt.
-    Handles both agent-mode (structured plan results) and simple
-    dashboard-data contexts.
-    """
     if not context_data:
         return ""
 

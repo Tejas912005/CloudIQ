@@ -1,15 +1,12 @@
 from tools import get_tool_data
 from sqlalchemy.orm import Session
 
-
 def infer_intent_from_keywords(message: str) -> str:
     text = message.lower()
 
-    # --- AGENTIC MUTATION INTENTS (High Specificity) ---
     if any(keyword in text for keyword in ["terminate", "kill", "shut down", "delete"]) and "idle" in text:
         return "terminate_idle"
         
-    # --- AGENTIC UI INTENTS (High Specificity) ---
     if "globe" in text or "map" in text:
         return "navigate_globe"
     if "graph" in text or "network" in text:
@@ -17,16 +14,12 @@ def infer_intent_from_keywords(message: str) -> str:
     if any(keyword in text for keyword in ["theme", "accent", "color", "font", "style", "appearance", "dark mode", "light mode", "layout", "css", "background"]):
         return "ui_theme_control"
 
-    # --- AGENTIC EXECUTION INTENTS (High Specificity) ---
-    # Stop unhealthy / risky / over-utilized resources -> simulated over-utilized mitigation
     if any(keyword in text for keyword in ["stop", "terminate", "kill", "shut down", "disable"]) and any(keyword in text for keyword in ["risky", "unhealthy", "overutilized", "over-utilized", "over utilized", "over-utilized"]):
         return "stop_risky_resources"
 
     if any(keyword in text for keyword in ["stop", "terminate", "kill", "shut down", "disable"]) and any(keyword in text for keyword in ["overutilized", "over-utilized", "over utilized"]):
         return "stop_overutilized_resources"
 
-
-    # --- GENERAL ANALYSIS INTENTS ---
     if any(keyword in text for keyword in ["summary", "overview", "status"]) and any(keyword in text for keyword in ["cloud", "system", "cost", "resource", "infrastructure"]):
         return "agent_mode"
     if any(keyword in text for keyword in ["optimize", "improve", "save", "recommend", "action", "security", "audit", "what if", "simulate"]):
@@ -42,14 +35,10 @@ def infer_intent_from_keywords(message: str) -> str:
     if any(keyword in text for keyword in ["resource", "instance", "server", "idle", "utilization", "cpu", "memory"]):
         return "analyze_resources"
 
-    # --------------------------
-    
     return "none"
-
 
 def _format_currency(amount):
     return f"${amount:,.2f}"
-
 
 def _format_resource_analysis(data):
     return (
@@ -62,7 +51,6 @@ def _format_resource_analysis(data):
         "Recommended next step\n"
         "- Review idle instances first, then right-size any over-utilized workloads."
     )
-
 
 def _format_anomalies(data):
     if not data["anomalies"]:
@@ -92,7 +80,6 @@ def _format_anomalies(data):
     ])
     return "\n".join(lines)
 
-
 def _format_cost_forecast(data):
     forecast_points = data["forecast"][:3]
     lines = [
@@ -111,7 +98,6 @@ def _format_cost_forecast(data):
         "- Compare the forecast against current budget thresholds and anomaly dates.",
     ])
     return "\n".join(lines)
-
 
 def _format_risks(data):
     if not data:
@@ -140,7 +126,6 @@ def _format_risks(data):
         "- Scale or restart the highest-risk resources before they become performance incidents.",
     ])
     return "\n".join(lines)
-
 
 def _format_agent_summary(db: Session = None):
     analysis = get_tool_data("analyze_resources", db) or {}
@@ -189,15 +174,9 @@ def _format_agent_summary(db: Session = None):
     ])
     return "\n".join(lines)
 
-
 def generate_local_response(message: str, intent: str, context_data=None, db: Session = None) -> str:
-    """
-    Generate a smart, friendly local response when LLMs (Gemini & Groq) are offline.
-    Handles conversational greetings, basic math, and intent routing seamlessly.
-    """
     message_lower = message.strip().lower()
 
-    # 1. Handle Greetings & Basic Interaction
     if message_lower in ["hi", "hello", "hey", "hii", "hey there", "good morning", "good afternoon", "yo"]:
         return (
             "Hello! I am CloudIQ, your AI-powered cloud intelligence assistant. "
@@ -208,7 +187,6 @@ def generate_local_response(message: str, intent: str, context_data=None, db: Se
             "- Identify operational risks and failing instances"
         )
 
-    # 2. Handle Identity / Capability Questions
     if any(q in message_lower for q in ["who are you", "what is your name", "what is cloudiq", "introduce yourself"]):
         return (
             "I am CloudIQ, your intelligent cloud architect and cost optimization assistant. "
@@ -226,25 +204,19 @@ def generate_local_response(message: str, intent: str, context_data=None, db: Se
             "5. **Optimization**: Ask for 'recommendations' or 'how to save money'."
         )
 
-    # 3. Handle Math Questions (e.g., "1+1", "what is 1+1") exactly like ChatGPT
     import re
-    # Extract expressions like "what is 1 + 1" or "2*3"
     math_match = re.search(r'(?:what\s+is\s+)?([0-9\s+\-*/().]+)(?:\?)?$', message_lower)
     if math_match:
         expr = math_match.group(1).replace(" ", "")
-        # Ensure it contains at least one operator to avoid treating plain numbers as math
         if any(op in expr for op in ["+", "-", "*", "/"]):
             try:
-                # Safe evaluation of basic math expressions
                 allowed_chars = set("0123456789+-*/().")
                 if all(c in allowed_chars for c in expr):
                     result = eval(expr, {"__builtins__": None}, {})
-                    # Return direct clean result like '2'
                     return str(result)
             except Exception:
                 pass
 
-    # 4. Route standard intent-based responses
     if intent == "analyze_resources":
         return _format_resource_analysis(context_data or get_tool_data("analyze_resources", db))
     if intent == "detect_anomalies":
@@ -252,14 +224,12 @@ def generate_local_response(message: str, intent: str, context_data=None, db: Se
     if intent == "predict_costs":
         return _format_cost_forecast(context_data or get_tool_data("predict_costs", db))
     if intent == "predict_resource_risk":
-        # Extract high risk resources
         risk_data = context_data or get_tool_data("predict_resource_risk", db) or {}
         high_risks = risk_data.get("high_risk_resources", risk_data) if isinstance(risk_data, dict) else risk_data
         return _format_risks(high_risks)
     if intent == "agent_mode":
         return _format_agent_summary(db)
 
-    # 5. Default conversational response for other general questions
     return (
         f"I received your message: \"{message}\"\n\n"
         "Currently, our cloud AI connection (Gemini/Groq) is undergoing maintenance or rate limiting. "
@@ -270,7 +240,4 @@ def generate_local_response(message: str, intent: str, context_data=None, db: Se
         "- *\"Are there any cost anomalies or spikes?\"*\n"
         "- *\"Give me cost optimization recommendations\"*"
     )
-
-
-
 

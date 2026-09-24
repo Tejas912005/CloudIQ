@@ -27,7 +27,6 @@ export default function Recommendations() {
   return (
     <div className="mx-auto flex max-w-[1600px] flex-col gap-5 animate-fade">
 
-      {/* Summary numbers */}
       <div className="grid gap-3 sm:grid-cols-3">
         <GlassPanel className="card-lift p-4">
           <p className="text-[10px] uppercase tracking-widest" style={{ color: 'var(--text-dim)' }}>Modeled Savings</p>
@@ -43,7 +42,6 @@ export default function Recommendations() {
         </GlassPanel>
       </div>
 
-      {/* Filter pills */}
       <div className="flex flex-wrap gap-2">
         {FILTERS.map((item) => (
           <button
@@ -61,7 +59,6 @@ export default function Recommendations() {
         ))}
       </div>
 
-      {/* Action cards */}
       <div className="grid gap-3">
         {filtered.map((item) => (
           <GlassPanel
@@ -70,7 +67,6 @@ export default function Recommendations() {
           >
             <div className="grid gap-4 xl:grid-cols-[1.4fr_0.6fr_0.5fr]">
 
-              {/* Action + chips */}
               <div className="space-y-2">
                 <div className="flex flex-wrap items-center gap-2">
                   <StatusChip
@@ -84,7 +80,6 @@ export default function Recommendations() {
                 <p className="text-sm" style={{ color: 'var(--text-muted)' }}>{item.reason}</p>
               </div>
 
-              {/* Impact */}
               <div
                 className="rounded-lg border p-3"
                 style={{ borderColor: 'var(--border)', background: 'var(--surface)' }}
@@ -93,7 +88,6 @@ export default function Recommendations() {
                 <p className="font-display text-lg" style={{ color: 'var(--text-base)' }}>{item.impactLabel}</p>
               </div>
 
-              {/* Resource + CTA */}
               <div className="space-y-2">
                 <div
                   className="rounded-lg border p-3"

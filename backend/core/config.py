@@ -1,9 +1,3 @@
-"""
-core/config.py
---------------
-Centralized settings for CloudIQ.
-Reads from .env in the backend root directory.
-"""
 
 import os
 import logging
@@ -11,7 +5,6 @@ from pathlib import Path
 
 logger = logging.getLogger("cloudiq.config")
 
-# ─── Load .env manually (no python-dotenv dependency) ─────────────────────────
 def _load_env():
     env_path = Path(__file__).parent.parent / ".env"
     if not env_path.exists():
@@ -26,24 +19,18 @@ def _load_env():
 
 _load_env()
 
-
-# ─── Config Object ─────────────────────────────────────────────────────────────
 class Settings:
-    # Gemini
     GEMINI_API_KEY: str = os.environ.get("GEMINI_API_KEY", "").strip()
     GEMINI_MODEL: str = os.environ.get("GEMINI_MODEL", "gemini-2.0-flash").strip()
 
-    # Groq (Llama 3 cloud — replaces local Ollama for production)
     GROQ_API_KEY: str = os.environ.get("GROQ_API_KEY", "").strip()
     GROQ_MODEL: str = os.environ.get("GROQ_MODEL", "llama3-8b-8192").strip()
 
-    # Database
     DB_URL: str = os.environ.get(
         "DATABASE_URL",
         f"sqlite:///{Path(__file__).parent.parent / 'cloudiq.db'}"
     )
 
-    # App
     APP_NAME: str = "CloudIQ"
     APP_VERSION: str = "2.0.0"
     DEBUG: bool = os.environ.get("DEBUG", "true").lower() == "true"
@@ -73,6 +60,5 @@ class Settings:
         else:
             logger.warning("[CONFIG] ⚠️  GROQ_API_KEY not found — Groq/Llama3 routing disabled")
         logger.info(f"[CONFIG] Database: {self.DB_URL}")
-
 
 settings = Settings()

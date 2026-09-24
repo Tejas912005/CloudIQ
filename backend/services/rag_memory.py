@@ -1,10 +1,3 @@
-"""
-services/rag_memory.py
------------------------
-Persistent AI Memory using ChromaDB.
-DEPLOY FIX: Uses DefaultEmbeddingFunction to avoid 400MB sentence-transformers
-model download that crashes Render's free-tier RAM limit (512MB).
-"""
 
 import chromadb
 from chromadb.utils import embedding_functions
@@ -16,9 +9,6 @@ logger = logging.getLogger("cloudiq.rag")
 
 DB_DIR = os.path.join(os.path.dirname(__file__), "..", "chroma_db")
 
-# Use ChromaDB's built-in lightweight embedding (no sentence-transformers needed).
-# On Render/cloud: simple character-level hash for similarity.
-# Trades deep semantic accuracy for zero-download cloud compatibility.
 _default_ef = embedding_functions.DefaultEmbeddingFunction()
 
 try:
@@ -26,16 +16,14 @@ try:
     chroma_client = chromadb.PersistentClient(path=DB_DIR)
     chat_collection = chroma_client.get_or_create_collection(
         name="chat_history",
-        embedding_function=_default_ef,   # ← explicit lightweight embedding
+        embedding_function=_default_ef,
     )
     logger.info("[RAG] ChromaDB initialized with default embedding function")
 except Exception as e:
     logger.error(f"[RAG] Failed to initialize ChromaDB: {e}")
     chat_collection = None
 
-
 def store_interaction(user_message: str, ai_response: str, metadata: dict = None):
-    """Store an interaction in the RAG memory."""
     if chat_collection is None:
         return
 
@@ -54,9 +42,7 @@ def store_interaction(user_message: str, ai_response: str, metadata: dict = None
     except Exception as e:
         logger.error(f"[RAG] Failed to store interaction: {e}")
 
-
 def retrieve_relevant_history(query: str, n_results: int = 3) -> list:
-    """Retrieve top relevant past interactions based on similarity search."""
     if chat_collection is None:
         return []
 
@@ -75,9 +61,7 @@ def retrieve_relevant_history(query: str, n_results: int = 3) -> list:
         logger.error(f"[RAG] Failed to retrieve history: {e}")
         return []
 
-
 def clear_memory():
-    """Clear all stored interactions in the RAG memory."""
     global chat_collection
     if chat_collection is None:
         return

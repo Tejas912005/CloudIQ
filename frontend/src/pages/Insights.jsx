@@ -37,7 +37,6 @@ export default function Insights() {
   return (
     <div className="mx-auto flex max-w-[1600px] flex-col gap-5 animate-fade">
 
-      {/* Insights header (KPI + takeaways) */}
       <GlassPanel className="p-5 space-y-4" glow>
         <div className="flex items-start justify-between gap-4">
           <div>
@@ -116,12 +115,8 @@ export default function Insights() {
         </div>
       </GlassPanel>
 
-      {/* Spend + Fleet row */}
       <div className="grid gap-5 xl:grid-cols-[1.2fr_0.8fr]">
 
-
-
-        {/* Area chart */}
         <GlassPanel className="space-y-3 p-5">
           <h3 className="font-display text-base font-medium" style={{ color: 'var(--text-base)' }}>Spend Over Time</h3>
           <div className="h-[280px]">
@@ -145,7 +140,6 @@ export default function Insights() {
           </div>
         </GlassPanel>
 
-        {/* Pie chart */}
         <GlassPanel className="space-y-3 p-5">
           <h3 className="font-display text-base font-medium" style={{ color: 'var(--text-base)' }}>Fleet State</h3>
           <div className="h-[280px]">
@@ -167,7 +161,6 @@ export default function Insights() {
         </GlassPanel>
       </div>
 
-      {/* Bar chart */}
       <GlassPanel className="space-y-3 p-5">
         <h3 className="font-display text-base font-medium" style={{ color: 'var(--text-base)' }}>CPU Intensity</h3>
         <div className="h-[260px]">

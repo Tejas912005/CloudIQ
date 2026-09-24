@@ -5,7 +5,6 @@ import { fetchJson } from '../lib/api';
 import { LoadingState, ErrorState, EmptyState } from '../components/StatusPanel';
 import GlassPanel from '../components/shared/GlassPanel';
 
-// Read semantic colors from the design system CSS variables
 const CSS = typeof getComputedStyle !== 'undefined'
   ? getComputedStyle(document.documentElement)
   : null;
@@ -58,12 +57,12 @@ export default function Globe() {
   }, [resources]);
 
   const arcsData = useMemo(() => {
-    // Deterministic arcs — same topology every visit (seeded by region pair index)
+    
     if (regions.length < 2) return [];
     const arcs = [];
     for (let i = 0; i < regions.length; i++) {
       for (let j = i + 1; j < regions.length; j++) {
-        // Deterministic "30% connection chance" using index hash instead of Math.random()
+        
         const deterministicHash = (i * 31 + j * 17) % 10;
         if (deterministicHash > 6) {
           arcs.push({

@@ -1,13 +1,3 @@
-"""
-services/anomaly_service.py
-----------------------------
-Anomaly detection service for CloudIQ v2.
-Upgraded from CloudIQ's anomaly_detector.py to:
-  - Use SQLAlchemy ORM instead of raw sqlite3
-  - Detect anomalies in BOTH cost history AND resource metrics (CPU, latency, error_rate)
-  - Persist detected anomalies to AnomalyRecord table
-  - Return structured results with severity classification
-"""
 
 import logging
 import numpy as np
@@ -19,8 +9,6 @@ from models.models import CostHistory, CloudResource, AnomalyRecord
 
 logger = logging.getLogger("cloudiq.anomaly_service")
 
-
-# â”€â”€â”€ Severity classification â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 import time
 
 _cost_cache = {"result": None, "ts": 0.0}
@@ -30,8 +18,6 @@ CACHE_TTL = 60
 def _format_currency_simple(amount: float) -> str:
     return f"${amount:,.2f}"
 
-
-# â”€â”€â”€ Severity classification â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 def _severity(z_score: float) -> str:
     az = abs(z_score)
     if az >= 4.0:
@@ -42,17 +28,7 @@ def _severity(z_score: float) -> str:
         return "medium"
     return "low"
 
-
-# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
-#  COST ANOMALY DETECTION  (Z-score on daily cost history)
-# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
-
 def detect_cost_anomalies(db: Session) -> Dict:
-    """
-    Z-score anomaly detection on CostHistory table.
-    Flags days where |z| > 2.0.
-    Also updates CostHistory.is_anomaly and persists AnomalyRecord rows.
-    """
     global _cost_cache
     now_ts = time.time()
     if _cost_cache["result"] is not None and now_ts - _cost_cache["ts"] < CACHE_TTL:
@@ -71,7 +47,6 @@ def detect_cost_anomalies(db: Session) -> Dict:
 
     anomalies = []
 
-    # Clear old cost anomaly records
     db.query(AnomalyRecord).filter(AnomalyRecord.anomaly_type == "cost").delete()
 
     for row, z, cost in zip(rows, z_scores, costs):
@@ -117,22 +92,7 @@ def detect_cost_anomalies(db: Session) -> Dict:
     _cost_cache["ts"] = now_ts
     return result
 
-
-# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
-#  METRIC ANOMALY DETECTION  (CPU, latency, error_rate per resource)
-# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
-
 def detect_metric_anomalies(db: Session) -> List[Dict]:
-    """
-    Detects anomalies in resource-level metrics using threshold rules.
-    Generates AnomalyRecord entries for metric violations.
-
-    Thresholds:
-      - cpu_usage     > 90% â†’ high/critical
-      - latency_ms    > 500 â†’ medium/high
-      - error_rate    > 5%  â†’ medium/high/critical
-      - memory_usage  > 90% â†’ high
-    """
     global _metric_cache
     now_ts = time.time()
     if _metric_cache["result"] is not None and now_ts - _metric_cache["ts"] < CACHE_TTL:
@@ -141,7 +101,6 @@ def detect_metric_anomalies(db: Session) -> List[Dict]:
     resources = db.query(CloudResource).all()
     metric_anomalies = []
 
-    # Clear old metric anomalies
     db.query(AnomalyRecord).filter(AnomalyRecord.anomaly_type != "cost").delete()
 
     today = datetime.utcnow().strftime("%Y-%m-%d")
@@ -155,7 +114,6 @@ def detect_metric_anomalies(db: Session) -> List[Dict]:
         ]
         for metric_type, value, threshold, label in checks:
             if value and value > threshold:
-                # Simple severity scaling
                 ratio = value / threshold
                 if ratio >= 2.0:
                     sev = "critical"
@@ -198,13 +156,7 @@ def detect_metric_anomalies(db: Session) -> List[Dict]:
     _metric_cache["ts"] = now_ts
     return metric_anomalies
 
-
-# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
-#  COMBINED ANOMALY REPORT
-# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
-
 def get_full_anomaly_report(db: Session) -> Dict:
-    """Combined cost + metric anomaly detection."""
     cost_report   = detect_cost_anomalies(db)
     metric_report = detect_metric_anomalies(db)
     return {

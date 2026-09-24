@@ -11,8 +11,6 @@ export default class ErrorBoundary extends Component {
     return { error };
   }
 
-  // ARCH-009 FIX: Reset error state when user navigates to a new route.
-  // The parent passes routeKey={location.pathname} which changes on navigation.
   componentDidUpdate(prevProps) {
     if (this.state.error && prevProps.routeKey !== this.props.routeKey) {
       this.setState({ error: null });

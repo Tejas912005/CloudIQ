@@ -1,12 +1,3 @@
-"""
-routers/graph.py
------------------
-Graph-based cloud risk endpoints:
-  GET  /api/graph                          — full graph (nodes + edges + stats)
-  GET  /api/graph/blast-radius?resource_id — cascading failure simulation
-  GET  /api/graph/attack-paths?source&target — attack path detection
-  GET  /api/graph/risk-analysis             — full node risk scoring
-"""
 
 import logging
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -28,20 +19,12 @@ logger = logging.getLogger("cloudiq.router.graph")
 
 router = APIRouter(prefix="/api/graph", tags=["Graph"])
 
-
 @router.get("", response_model=GraphResponse, dependencies=[Depends(verify_api_key)])
 def get_graph(db: Session = Depends(get_db)):
-    """
-    Returns the full cloud resource dependency graph.
-    Nodes are colored by risk level (Low/Medium/High).
-    Edges represent network/data dependencies.
-    Use this to visualize your cloud topology and identify risk clusters.
-    """
     try:
-        # Build the graph ONCE and reuse for both risk analysis and node construction
         G        = build_graph(db)
         stats    = get_graph_stats(G)
-        risk_data = compute_risk_analysis(db, graph=G)   # pass graph to avoid rebuild
+        risk_data = compute_risk_analysis(db, graph=G)
         risk_map = {r["id"]: r for r in risk_data}
 
         nodes = []
@@ -67,7 +50,6 @@ def get_graph(db: Session = Depends(get_db)):
                 sensitivity=attrs.get("sensitivity", "Low"),
             ))
 
-        # Build typed edge list — single scan, reuse graph edges
         connections   = db.query(ResourceConnection).all()
         _res_all      = db.query(CloudResource).all()
         uid_map       = {r.id: r.resource_uid for r in _res_all}
@@ -91,17 +73,11 @@ def get_graph(db: Session = Depends(get_db)):
         logger.error(f"[GRAPH] Error building graph: {e}")
         raise
 
-
 @router.get("/blast-radius", response_model=BlastRadiusResponse, dependencies=[Depends(verify_api_key)])
 def blast_radius(
     resource_id: int = Query(..., description="Database ID of the source resource"),
     db: Session = Depends(get_db)
 ):
-    """
-    Simulate cascading failure: if resource X fails, what else goes down?
-    Returns all downstream nodes reachable from the given resource.
-    Formula: EC2 → Database → Storage → Network (propagation)
-    """
     resource = db.query(CloudResource).filter(CloudResource.id == resource_id).first()
     if not resource:
         raise HTTPException(status_code=404, detail=f"Resource with id={resource_id} not found")
@@ -129,17 +105,12 @@ def blast_radius(
         total_cascading_risk=result["total_cascading_risk"],
     )
 
-
 @router.get("/attack-paths", dependencies=[Depends(verify_api_key)])
 def attack_paths(
     source: int = Query(..., description="Source resource database ID"),
     target: int = Query(..., description="Target resource database ID"),
     db: Session = Depends(get_db)
 ):
-    """
-    Find all attack paths between two nodes.
-    Returns simple paths of length ≤ 8 ordered by total risk.
-    """
     src = db.query(CloudResource).filter(CloudResource.id == source).first()
     tgt = db.query(CloudResource).filter(CloudResource.id == target).first()
 
@@ -151,13 +122,12 @@ def attack_paths(
     G = build_graph(db)
     paths = find_attack_paths(G, source, target)
 
-    # Single scan — no duplicate queries
     _all_resources = db.query(CloudResource).all()
     uid_map  = {r.id: r.resource_uid for r in _all_resources}
     name_map = {r.id: r.name         for r in _all_resources}
 
     formatted = []
-    for path in paths[:10]:  # cap at 10 paths
+    for path in paths[:10]:
         formatted.append({
             "path_ids":   path,
             "path_uids":  [uid_map.get(n, str(n)) for n in path],
@@ -170,14 +140,8 @@ def attack_paths(
     logger.info(f"[GRAPH] Attack paths {src.name}→{tgt.name}: {len(paths)} found")
     return {"source": src.name, "target": tgt.name, "paths": formatted}
 
-
 @router.get("/risk-analysis", dependencies=[Depends(verify_api_key)])
 def risk_analysis(db: Session = Depends(get_db)):
-    """
-    Full graph-based risk analysis using:
-    Risk Score = (Connectivity × 2) + Sensitivity + Exposure
-    Returns all nodes sorted by risk_score descending.
-    """
     results = compute_risk_analysis(db)
     logger.info(f"[GRAPH] Risk analysis complete: {len(results)} nodes")
     return {

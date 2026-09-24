@@ -22,7 +22,6 @@ export default function SparkLine({
   const w = width - pad * 2;
   const h = height - pad * 2;
 
-  // Map data points to SVG coordinates
   const points = nums.map((v, i) => ({
     x: pad + (i / (nums.length - 1)) * w,
     y: pad + h - ((v - min) / range) * h,

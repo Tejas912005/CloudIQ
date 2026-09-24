@@ -1,9 +1,3 @@
-"""
-routers/chat.py
----------------
-POST /api/chat â€” AI-powered cloud assistant endpoint.
-Connects to the agentic chat controller which uses Gemini + fallback.
-"""
 
 import logging
 import json
@@ -23,19 +17,10 @@ logger = logging.getLogger("cloudiq.router.chat")
 
 router = APIRouter(prefix="/api", tags=["Chat"])
 
-
-
-
-
 def check_resource_action(message: str, db: Session):
-    """
-    Check if the user is asking to stage a specific recommendation action
-    on a specific resource. Returns action details if match found.
-    """
     from models.models import CloudResource
     lower = message.lower()
     
-    # Extract action type
     is_terminate = any(kw in lower for kw in ["terminate", "stop", "kill", "shut down", "delete"])
     is_scale = any(kw in lower for kw in ["scale", "upgrade", "downsize", "resize"])
     is_disable_public = any(kw in lower for kw in ["disable public", "restrict public", "block public", "remove public"])
@@ -43,11 +28,9 @@ def check_resource_action(message: str, db: Session):
     if not (is_terminate or is_scale or is_disable_public):
         return None
         
-    # Find matching resource name in message
     resources = db.query(CloudResource).all()
     for r in resources:
         if r.name.lower() in lower:
-            # We found a match!
             if is_terminate:
                 cost_saving = r.monthly_cost or 0.0
                 return {
@@ -78,9 +61,7 @@ def check_resource_action(message: str, db: Session):
                 }
     return None
 
-
 def extract_json_commands(text: str) -> list:
-    """Finds all valid JSON objects containing an 'action' key in the text with balanced braces."""
     results = []
     n = len(text)
     i = 0
@@ -120,20 +101,12 @@ def extract_json_commands(text: str) -> list:
         i += 1
     return results
 
-
-
 @router.post("/chat", response_model=ChatResponse, dependencies=[Depends(verify_api_key)])
 def chat_endpoint(req: ChatRequest, db: Session = Depends(get_db)):
-    """
-    AI Cloud Assistant â€” powered by Gemini 1.5 Flash with local fallback.
-    Supports: cost analysis, anomaly detection, predictions, risk analysis,
-    graph-based blast radius, attack paths, recommendations, and free-form Q&A.
-    """
     try:
         message = req.message.strip()
         intent = _resolve_intent(message)
 
-        # Check for specific resource actions
         res_action = check_resource_action(message, db)
         if res_action:
             full_response = res_action["text"]
@@ -168,7 +141,6 @@ def chat_endpoint(req: ChatRequest, db: Session = Depends(get_db)):
                 fallback_intent = infer_intent_from_keywords(message)
                 full_response = generate_local_response(message, fallback_intent, context_data, db=db)
 
-        # Persist to ChatLog table
         db.add(ChatLog(role="user",  message=message, intent=intent, mode="gemini"))
         db.add(ChatLog(role="model", message=full_response, intent=intent, mode="gemini"))
         try:
@@ -193,10 +165,8 @@ def chat_endpoint(req: ChatRequest, db: Session = Depends(get_db)):
             mode="local_fallback",
         )
 
-
 @router.post("/chat/stream", dependencies=[Depends(verify_api_key)])
 def chat_stream_endpoint(req: ChatRequest, db: Session = Depends(get_db)):
-    """SSE endpoint for token-by-token assistant responses."""
     message = (req.message or "").strip()
 
     def event(payload: dict) -> str:
@@ -209,7 +179,6 @@ def chat_stream_endpoint(req: ChatRequest, db: Session = Depends(get_db)):
 
         intent = _resolve_intent(message)
         
-        # Check for specific resource actions
         res_action = check_resource_action(message, db)
         if res_action:
             yield event({"type": "thinking", "intent": intent})
@@ -236,7 +205,6 @@ def chat_stream_endpoint(req: ChatRequest, db: Session = Depends(get_db)):
 
         yield event({"type": "thinking", "intent": intent})
         
-        # --- AGENTIC UI: ACTION DISPATCH ---
         if intent == "navigate_globe":
             yield event({"type": "action", "command": "navigate", "target": "/globe"})
             yield event({"type": "token", "text": "Initiating Agentic UI Control... Navigating to Globe View."})
@@ -265,9 +233,7 @@ def chat_stream_endpoint(req: ChatRequest, db: Session = Depends(get_db)):
             })
             yield event({"type": "done", "intent": intent})
             return
-        # -----------------------------------
 
-        # Stop risky/unhealthy resources -> demo simulation of over-utilized mitigation
         elif intent in ["stop_risky_resources", "stop_overutilized_resources"]:
             yield event({"type": "token", "text": "I found 5 high-risk over-utilized resources. Please approve the execution card to stop them and reduce risk.\n\n"})
             yield event({
@@ -282,7 +248,6 @@ def chat_stream_endpoint(req: ChatRequest, db: Session = Depends(get_db)):
             return
 
         import re as _re
-
 
         def parse_stream_buffer(buf: str, is_final: bool = False):
             actions = []
@@ -323,12 +288,10 @@ def chat_stream_endpoint(req: ChatRequest, db: Session = Depends(get_db)):
             for chunk in stream_routed_response(message, history, context_data, intent=intent, db=db):
                 stream_buffer += chunk
                 
-                # Parse completed blocks from the stream_buffer
                 stream_buffer, actions = parse_stream_buffer(stream_buffer, is_final=False)
                 for action in actions:
                     yield event({"type": "action", "command": "ui_control", "payload": action})
                     
-                # Decide what to yield as tokens
                 idx_backtick = stream_buffer.find('`')
                 idx_brace = stream_buffer.find('{')
                 
@@ -366,7 +329,6 @@ def chat_stream_endpoint(req: ChatRequest, db: Session = Depends(get_db)):
             full_buffer = fallback_text
             yield event({"type": "token", "text": fallback_text})
 
-        # Final flush
         if stream_buffer:
             stream_buffer, final_actions = parse_stream_buffer(stream_buffer, is_final=True)
             for action in final_actions:
@@ -386,8 +348,6 @@ def chat_stream_endpoint(req: ChatRequest, db: Session = Depends(get_db)):
 
         yield event({"type": "done", "intent": intent})
 
-
-
     return StreamingResponse(
         generate(),
         media_type="text/event-stream",
@@ -400,14 +360,12 @@ class AgentAction(BaseModel):
 
 @router.post("/agent/execute", dependencies=[Depends(verify_api_key)])
 def execute_agent_action(action: AgentAction, db: Session = Depends(get_db)):
-    """Executes a specific agent mutation against the database."""
     from models.models import CloudResource
 
-    # Only simulated demo actions are allowed (no real cloud operations)
     allowed_action_ids = {
-        "term_idle_123",          # terminate Idle demo resources
-        "stop_overutilized_123", # terminate Over-Utilized demo resources
-        "mark_high_risk_review_123", # mark top risks for review (no termination)
+        "term_idle_123",
+        "stop_overutilized_123",
+        "mark_high_risk_review_123",
     }
 
     is_dynamic = action.actionId.startswith("term_res_") or action.actionId.startswith("scale_res_") or action.actionId.startswith("secure_res_")
@@ -422,7 +380,6 @@ def execute_agent_action(action: AgentAction, db: Session = Depends(get_db)):
             )
         }
 
-    # Simulated action mutations only (no real cloud operations)
     if action.actionId.startswith("term_res_") or action.actionId.startswith("scale_res_") or action.actionId.startswith("secure_res_"):
         parts = action.actionId.split("_")
         try:
@@ -472,9 +429,7 @@ def execute_agent_action(action: AgentAction, db: Session = Depends(get_db)):
                 db.rollback()
                 return {"status": "error", "message": str(e)}
 
-    # Simulated action mutations only (no real cloud operations)
     if action.actionId == "term_idle_123":
-        # Terminate all idle resources and compute real savings
         idle_resources = db.query(CloudResource).filter(CloudResource.status == "Idle").all()
         real_savings = round(sum((r.monthly_cost or 0) * 0.95 for r in idle_resources), 2)
         for res in idle_resources:
@@ -490,7 +445,6 @@ def execute_agent_action(action: AgentAction, db: Session = Depends(get_db)):
             return {"status": "error", "message": str(e)}
 
     if action.actionId == "stop_overutilized_123":
-        # Simulate stopping/mitigating over-utilized resources
         over_resources = (
             db.query(CloudResource)
             .filter(CloudResource.status == "Over-Utilized")
@@ -513,8 +467,6 @@ def execute_agent_action(action: AgentAction, db: Session = Depends(get_db)):
             return {"status": "error", "message": str(e)}
 
     if action.actionId == "mark_high_risk_review_123":
-        # Simulate placing high-risk resources into review mode (no termination)
-        # Note: we do not have risk score in the DB, so we approximate by selecting top over-utilized resources.
         review_resources = (
             db.query(CloudResource)
             .filter(CloudResource.status.in_(["Over-Utilized", "Idle"]))
@@ -535,11 +487,8 @@ def execute_agent_action(action: AgentAction, db: Session = Depends(get_db)):
 
     return {"status": "error", "message": "Unknown action ID"}
 
-
-
 @router.post("/chat/clear", dependencies=[Depends(verify_api_key)])
 def clear_chat_endpoint(db: Session = Depends(get_db)):
-    """Clear all chat logs from database for a fresh session."""
     try:
         db.query(ChatLog).delete()
         db.commit()

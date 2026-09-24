@@ -183,7 +183,7 @@ export function buildCommandCenterModel(snapshot, language = 'en') {
   const graph = analyze.graph || {};
   
   const predictions = predict || {};
-  const costPredictions = predictions; // They are merged in predict endpoint
+  const costPredictions = predictions; 
   const history = snapshot.history || [];
   const riskResources = predictions.resource_risks || [];
 
@@ -289,8 +289,6 @@ export function buildCommandCenterModel(snapshot, language = 'en') {
     { name: 'Over', value: summary.over_utilized_count || 0 },
   ];
 
-  // BUG-012 FIX: resources[] is always empty (analyze API returns summary counts, not per-resource data)
-  // Derive CPU band estimates from available status summary counts
   const totalRes = summary.total_resources || 1;
   const usageBands = [
     { label: '0-25%',  count: summary.idle_count || 0 },

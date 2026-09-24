@@ -68,7 +68,6 @@ function getTestLocation() {
     output.innerHTML = "<em>Requesting permission and fetching coordinates...</em>";
     button.disabled = true;
 
-    // Feature Detection
     if (!navigator.geolocation) {
         output.className = "result-box error";
         output.innerHTML = "<strong>Error:</strong> Geolocation is not supported by this browser.";
@@ -76,7 +75,6 @@ function getTestLocation() {
         return;
     }
 
-    // Call Geolocation API
     navigator.geolocation.getCurrentPosition(showSuccess, showError, {
         enableHighAccuracy: true,
         timeout: 10000,

@@ -1,14 +1,3 @@
-"""
-services/langchain_router.py
-----------------------------
-Intelligent AI router with FULL bidirectional failover:
-  1. Try PRIMARY model (Gemini by default)
-  2. If PRIMARY fails (quota/error) → switch to SECONDARY (Groq)
-  3. If SECONDARY also fails → fall back to local analytics engine
-  4. NEVER crash the stream — always yield something useful
-
-This means the chat will ALWAYS respond, regardless of which API is down.
-"""
 import logging
 from typing import Iterator, Optional
 from sqlalchemy.orm import Session
@@ -19,9 +8,7 @@ from core.intent_utils import GREETING_PHRASES, IDENTITY_PHRASES
 
 logger = logging.getLogger("cloudiq.langchain_router")
 
-
 def _stream_gemini(message: str, history: list, context_data: Optional[dict], system_prompt: str, rag_history: Optional[str] = None) -> Iterator[str]:
-    """Stream from Gemini, raises on failure so caller can failover."""
     client = gemini_service.get_client()
     if client is None:
         raise Exception("Gemini client not available")
@@ -65,13 +52,10 @@ def _stream_gemini(message: str, history: list, context_data: Optional[dict], sy
             if text:
                 yield text
     except Exception as e:
-        # Reset client so next call tries to re-initialize
         gemini_service._client = None
         raise Exception(f"Gemini stream error: {e}") from e
 
-
 def _stream_groq(message: str, history: list, context_data: Optional[dict], system_prompt: str, rag_history: Optional[str] = None) -> Iterator[str]:
-    """Stream from Groq, raises on failure so caller can failover."""
     if not groq_service.is_groq_active():
         raise Exception("Groq API key not configured")
 
@@ -85,9 +69,7 @@ def _stream_groq(message: str, history: list, context_data: Optional[dict], syst
     if not chunks_received:
         raise Exception("Groq returned empty response")
 
-
 def _stream_local_fallback(message: str, context_data: Optional[dict], db: Session = None) -> Iterator[str]:
-    """Always succeeds — uses local rule-based analytics engine."""
     try:
         from local_fallback import generate_local_response, infer_intent_from_keywords
         intent = infer_intent_from_keywords(message)
@@ -96,7 +78,6 @@ def _stream_local_fallback(message: str, context_data: Optional[dict], db: Sessi
     except Exception as e:
         yield f"CloudIQ is running. Ask about resource usage, cost analysis, or optimization recommendations."
 
-
 def stream_routed_response(
     message: str,
     history: list,
@@ -104,13 +85,6 @@ def stream_routed_response(
     intent: str = "none",
     db: Session = None
 ) -> Iterator[str]:
-    """
-    Full bidirectional failover routing:
-      Gemini → Groq → Local Fallback
-    Each level is tried in order. On failure, the next level is used.
-    The stream NEVER crashes — it always yields a response.
-    """
-    # 0. Fast-path check for basic greetings, identity, math, and help
     from local_fallback import infer_intent_from_keywords, generate_local_response
     message_lower = message.strip().lower()
     full_response = ""
@@ -137,7 +111,6 @@ def stream_routed_response(
         if response.strip():
             rag_memory.store_interaction(message, response)
         return
-    # 1. RAG Memory Retrieval
     data_intents = {"analyze_resources", "detect_anomalies", "predict_costs", "predict_resource_risk", "agent_mode"}
     relevant_history = rag_memory.retrieve_relevant_history(message) if intent in data_intents else []
     rag_history_text = ""
@@ -153,7 +126,6 @@ def stream_routed_response(
     else:
         system_prompt = CLOUDIQ_SYSTEM_PROMPT
 
-    # 2. Try Gemini first
     gemini_ok = gemini_service.is_gemini_active()
     if gemini_ok:
         logger.info("[ROUTER] PRIMARY: Attempting Gemini stream...")
@@ -161,21 +133,18 @@ def stream_routed_response(
             for chunk in _stream_gemini(message, history, context_data, system_prompt, rag_history=rag_history_text):
                 full_response += chunk
                 yield chunk
-            # Gemini succeeded — save and return
             if full_response.strip():
                 rag_memory.store_interaction(message, full_response)
             return
         except Exception as e:
             logger.warning(f"[ROUTER] Gemini failed → switching to Groq. Error: {e}")
-            full_response = ""  # Reset for next attempt
+            full_response = ""
 
-    # 3. Try Groq as fallback (or primary if Gemini unavailable)
     logger.info("[ROUTER] SECONDARY: Attempting Groq stream...")
     try:
         for chunk in _stream_groq(message, history, context_data, system_prompt, rag_history=rag_history_text):
             full_response += chunk
             yield chunk
-        # Groq succeeded — save and return
         if full_response.strip():
             rag_memory.store_interaction(message, full_response)
         return
@@ -183,7 +152,6 @@ def stream_routed_response(
         logger.warning(f"[ROUTER] Groq also failed → using local fallback. Error: {e}")
         full_response = ""
 
-    # 4. Last resort: local analytics fallback (never fails)
     logger.info("[ROUTER] FALLBACK: Using local analytics engine.")
     for chunk in _stream_local_fallback(message, context_data, db=db):
         full_response += chunk

@@ -16,7 +16,6 @@ const Globe           = lazy(() => import('./pages/Globe'));
 const Resources       = lazy(() => import('./pages/Resources'));
 const Predictions     = lazy(() => import('./pages/Predictions'));
 
-// Fast, subtle, professional transitions (220ms)
 const pageVariants = {
   initial: { opacity: 0, y: 10 },
   animate: {
@@ -33,9 +32,6 @@ function RouteLoader() {
   return <LoadingState message="Booting CloudIQ command modules..." />;
 }
 
-// FIXED: motion.div is the direct child of AnimatePresence with key={location.pathname}.
-// Routes sits INSIDE motion.div. AnimatePresence can now properly coordinate exit/enter.
-// Old bug: key was on <Routes> (not a motion component) so transitions never fired.
 function AnimatedRoutes() {
   const location = useLocation();
   return (
@@ -70,7 +66,7 @@ function AnimatedRoutes() {
 
 export default function App() {
   useEffect(() => {
-    // Restore AI-driven UI overrides persisted in localStorage
+    
     try {
       const overrides = JSON.parse(localStorage.getItem('cloudiq-ui-overrides') || '{}');
       const root = document.documentElement;

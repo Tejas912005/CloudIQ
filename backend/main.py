@@ -1,25 +1,8 @@
-"""
-main.py — CloudIQ v2 FastAPI Application
-==========================================
-Replaces the old Flask app.py.
-
-Changes:
-  - FastAPI with async support and OpenAPI docs at /docs
-  - SQLAlchemy ORM (auto-creates all tables on startup)
-  - Modular routers: /api/chat, /api/analyze, /api/predict, /api/recommend, /api/graph
-  - Data seeded on startup via simulator
-  - Gemini API verified on startup
-  - CORS for React dev server (localhost:5173 + 3000)
-
-Run with:
-    uvicorn main:app --reload --port 8000
-"""
 
 import os
 import sys
 import logging
 
-# ── Ensure UTF-8 output on Windows ───────────────────────────────────────────
 os.environ["PYTHONIOENCODING"] = "utf-8"
 if sys.stdout.encoding != "utf-8":
     try:
@@ -27,7 +10,6 @@ if sys.stdout.encoding != "utf-8":
     except Exception:
         pass
 
-# ── Logging setup ─────────────────────────────────────────────────────────────
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(name)s] %(levelname)s: %(message)s",
@@ -42,32 +24,18 @@ from contextlib import asynccontextmanager
 from core.config import settings
 from core.database import engine, SessionLocal, Base
 
-# ── Import all models so SQLAlchemy can create their tables ───────────────────
-import models.models  # noqa: F401
+import models.models
 
-# ── Create all tables ─────────────────────────────────────────────────────────
 Base.metadata.create_all(bind=engine)
-
-# ══════════════════════════════════════════════════════════════════════════════
-#  LIFESPAN EVENT
-# ══════════════════════════════════════════════════════════════════════════════
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """
-    On startup:
-    1. Verify Gemini API key (live ping)
-    2. Seed the database with simulated cloud data
-    3. Log system status
-    """
     logger.info("=" * 60)
     logger.info("  CloudIQ v2 — Starting Up")
     logger.info("=" * 60)
 
-    # ── Config status ─────────────────────────────────────────────────────────
     settings.log_status()
 
-    # ── Gemini verification ───────────────────────────────────────────────────
     try:
         from services.gemini_service import get_client
         model = get_client()
@@ -78,7 +46,6 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.error(f"[STARTUP] Gemini check failed: {e}")
 
-    # ── Database seeding ──────────────────────────────────────────────────────
     db = SessionLocal()
     try:
         from models.models import CloudResource
@@ -104,11 +71,10 @@ async def lifespan(app: FastAPI):
     logger.info("  Swagger docs:       http://localhost:8000/docs")
     logger.info("=" * 60)
     
-    yield  # App runs here
+    yield
     
     logger.info("[SHUTDOWN] CloudIQ shutting down")
 
-# ── FastAPI app ───────────────────────────────────────────────────────────────
 app = FastAPI(
     title="CloudIQ API",
     description=(
@@ -122,7 +88,6 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# ── CORS ──────────────────────────────────────────────────────────────────────
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.CORS_ORIGINS,
@@ -131,7 +96,6 @@ app.add_middleware(
     allow_headers=["Content-Type", "Authorization", "Accept"],
 )
 
-# ── Include Routers ───────────────────────────────────────────────────────────
 from routers import chat, analyze, predict, recommend, graph, health, upload, exports
 
 app.include_router(chat.router)
@@ -143,17 +107,8 @@ app.include_router(health.router)
 app.include_router(upload.router)
 app.include_router(exports.router)
 
-
-# Keep backward-compat routes for old Flask endpoints
 from routers import legacy
 app.include_router(legacy.router)
-
-
-
-
-# ══════════════════════════════════════════════════════════════════════════════
-#  ROOT
-# ══════════════════════════════════════════════════════════════════════════════
 
 @app.get("/", tags=["Root"])
 def root():

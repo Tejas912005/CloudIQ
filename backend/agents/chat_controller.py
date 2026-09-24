@@ -1,16 +1,3 @@
-"""
-agents/chat_controller.py
---------------------------
-Agentic chat controller for CloudIQ v2.
-Replaces chatbot.py — agents now ORCHESTRATE only, no heavy logic.
-All data retrieval and AI calls go through services.
-
-Architecture:
-  chat() → determines intent → fetches context via services → calls gemini_service
-  If Gemini fails → gemini_service.generate_response() handles fallback internally
-
-Chat history is persisted in SQLAlchemy ChatLog (not in-memory).
-"""
 
 import logging
 from typing import Optional
@@ -22,11 +9,7 @@ from services.gemini_service import generate_response
 
 logger = logging.getLogger("cloudiq.agents.chat_controller")
 
-
-# ── Intent → tool data mapper ─────────────────────────────────────────────────
-
 def _get_context_data(intent: str, db: Session) -> Optional[dict]:
-    """Fetch structured data from appropriate service based on intent."""
     try:
         if intent == "analyze_resources":
             from services.anomaly_service import detect_cost_anomalies
@@ -56,7 +39,6 @@ def _get_context_data(intent: str, db: Session) -> Optional[dict]:
             return {"high_risk_resources": risks}
 
         elif intent == "agent_mode":
-            # Full summary data for agent mode
             from services.anomaly_service import detect_cost_anomalies
             from services.prediction_service import predict_costs, predict_resource_risk
             from services.recommendation_service import generate_recommendations
@@ -90,14 +72,7 @@ def _get_context_data(intent: str, db: Session) -> Optional[dict]:
         logger.error(f"[CHAT_CTRL] Context data fetch failed for intent={intent}: {e}")
     return None
 
-
-# ── Chat history loader ────────────────────────────────────────────────────────
-
 def _load_history(db: Session, intent: str = "none", limit: int = 10) -> list:
-    """Load last N chat turns from DB as Gemini-compatible history, matching current intent category."""
-    # Isolated history timelines:
-    # 1. ARCHITECT DATA TIMELINE: Dense data analysis, forecasting, anomalies, risk, agent loop
-    # 2. GENERAL/UI TIMELINE: greetings, basic math, theme control, page navigation
     data_intents = {"analyze_resources", "detect_anomalies", "predict_costs", "predict_resource_risk", "agent_mode"}
     is_data = (intent in data_intents)
 
@@ -120,7 +95,6 @@ def _load_history(db: Session, intent: str = "none", limit: int = 10) -> list:
         history.append({"role": role, "parts": [{"text": log.message}]})
     return history
 
-
 def _run_agent_loop(goal: str, db: Session) -> dict:
     from agent_planner import generate_plan
     from agent_executor import execute_plan
@@ -133,7 +107,6 @@ def _run_agent_loop(goal: str, db: Session) -> dict:
     
     plan = generate_plan(goal)
     if not plan:
-        # Fallback to direct context fetch
         return _get_context_data("agent_mode", db)
     
     while iteration < max_iterations:
@@ -160,34 +133,20 @@ def _run_agent_loop(goal: str, db: Session) -> dict:
         "iterations": iteration + 1,
     }
 
-
-# ══════════════════════════════════════════════════════════════════════════════
-#  MAIN CHAT FUNCTION
-# ══════════════════════════════════════════════════════════════════════════════
-
 def chat(message: str, db: Session) -> dict:
-    """
-    Main chat entry point.
-    1. Determine intent (fast keyword match)
-    2. Fetch context data from appropriate service or run agent loop
-    3. Call Gemini (or fallback) via gemini_service
-    """
     if not message or not message.strip():
         return {"response": "Message cannot be empty", "intent": "error", "status": "error", "mode": "error"}
 
-    # Step 1: Fast keyword intent using canonical intent resolver
     from core.intent_utils import resolve_intent
     intent = resolve_intent(message)
 
     logger.info(f"[CHAT_CTRL] message='{message[:60]}...' intent={intent}")
 
-    # Step 3: For agent_mode, run the REAL agent loop
     if intent == "agent_mode":
         context_data = _run_agent_loop(message, db)
     else:
         context_data = _get_context_data(intent, db)
 
-    # Step 4: Single Gemini call for final response
     history = _load_history(db, intent=intent)
     result = generate_response(message, history, context_data)
 

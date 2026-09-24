@@ -1,8 +1,3 @@
-"""
-routers/health.py
-------------------
-GET /api/health — System health check.
-"""
 
 from fastapi import APIRouter
 from schemas.schemas import HealthResponse
@@ -11,13 +6,8 @@ from services.gemini_service import is_gemini_active
 
 router = APIRouter(prefix="/api", tags=["Health"])
 
-
 @router.get("/health", response_model=HealthResponse)
 def health():
-    """
-    System health check.
-    Returns Gemini API status, version, and overall system status.
-    """
     gemini_ok = is_gemini_active()
     return HealthResponse(
         status="ok",

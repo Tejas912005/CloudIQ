@@ -1,21 +1,3 @@
-"""
-services/graph_service.py
---------------------------
-Graph-based cloud risk engine — ported from Cloud_Project/graph_engine.py
-and enhanced for CloudIQ's unified data model.
-
-Risk Formula:
-    Risk Score = (Connectivity × 2) + Sensitivity + Exposure
-
-    Sensitivity : High=3 | Medium=2 | Low=1
-    Exposure    : public_access=True → 3 | False → 1
-    Connectivity: total degree (in + out edges) of the node
-
-Risk Levels:
-    Low    → score ≤ 5
-    Medium → 6 ≤ score ≤ 10
-    High   → score > 10
-"""
 
 import logging
 import itertools
@@ -28,10 +10,8 @@ from models.models import CloudResource, ResourceConnection
 
 logger = logging.getLogger("cloudiq.graph_service")
 
-# ─── Scoring Maps ─────────────────────────────────────────────────────────────
 SENSITIVITY_MAP = {"High": 3, "Medium": 2, "Low": 1}
 EXPOSURE_MAP    = {True: 3, False: 1}
-
 
 def _risk_level(score: float) -> str:
     if score <= 5:
@@ -40,16 +20,7 @@ def _risk_level(score: float) -> str:
         return "Medium"
     return "High"
 
-
-# ══════════════════════════════════════════════════════════════════════════════
-#  GRAPH CONSTRUCTION
-# ══════════════════════════════════════════════════════════════════════════════
-
 def build_graph(db: Session) -> nx.DiGraph:
-    """
-    Build a directed NetworkX graph from all CloudResource nodes
-    and ResourceConnection edges stored in the database.
-    """
     G = nx.DiGraph()
 
     resources = db.query(CloudResource).all()
@@ -85,18 +56,7 @@ def build_graph(db: Session) -> nx.DiGraph:
     logger.info(f"[GRAPH] Built graph: {G.number_of_nodes()} nodes, {G.number_of_edges()} edges")
     return G
 
-
-# ══════════════════════════════════════════════════════════════════════════════
-#  RISK SCORING
-# ══════════════════════════════════════════════════════════════════════════════
-
 def compute_risk_analysis(db: Session, graph=None) -> List[Dict]:
-    """
-    Build graph, score every node, persist updated risk_score to DB.
-    Returns list of dicts sorted by risk_score descending.
-    Accepts an optional pre-built graph to avoid duplicate build_graph calls.
-    """
-    # ── Reuse build_graph() — no duplicate DB queries ─────────────────────────
     G = graph if graph is not None else build_graph(db)
     resources = db.query(CloudResource).all()
     resource_map: Dict[int, CloudResource] = {r.id: r for r in resources}
@@ -115,7 +75,6 @@ def compute_risk_analysis(db: Session, graph=None) -> List[Dict]:
         risk_score = (connectivity * 2) + s_val + e_val
         level = _risk_level(risk_score)
 
-        # Persist back to DB
         if resource:
             resource.risk_score = float(risk_score)
 
@@ -147,13 +106,7 @@ def compute_risk_analysis(db: Session, graph=None) -> List[Dict]:
     logger.info(f"[GRAPH] Risk analysis complete: {len(results)} nodes scored")
     return results
 
-
-# ══════════════════════════════════════════════════════════════════════════════
-#  GRAPH STATISTICS
-# ══════════════════════════════════════════════════════════════════════════════
-
 def get_graph_stats(G: nx.DiGraph) -> Dict:
-    """Return summary statistics about the graph."""
     if G.number_of_nodes() == 0:
         return {
             "total_nodes": 0, "total_edges": 0, "avg_risk_score": 0,
@@ -176,16 +129,7 @@ def get_graph_stats(G: nx.DiGraph) -> Dict:
         "density":              round(nx.density(G), 4),
     }
 
-
-# ══════════════════════════════════════════════════════════════════════════════
-#  BLAST RADIUS  — Cascading failure simulation
-# ══════════════════════════════════════════════════════════════════════════════
-
 def get_blast_radius(G: nx.DiGraph, resource_id: int) -> Dict:
-    """
-    Simulate blast radius: which nodes are reachable from a failed node.
-    EC2 → Database → Storage → Network (downstream propagation).
-    """
     if resource_id not in G:
         return {"source_id": resource_id, "source_name": "Unknown",
                 "affected_nodes": [], "count": 0, "total_cascading_risk": 0}
@@ -211,21 +155,13 @@ def get_blast_radius(G: nx.DiGraph, resource_id: int) -> Dict:
         "total_cascading_risk": round(total_risk, 2),
     }
 
-
-# ══════════════════════════════════════════════════════════════════════════════
-#  ATTACK PATHS
-# ══════════════════════════════════════════════════════════════════════════════
-
 def find_attack_paths(G: nx.DiGraph, source_id: int, target_id: int) -> List[List[int]]:
-    """Find all simple paths between two nodes (attack paths). Max depth 8."""
     try:
         return list(nx.all_simple_paths(G, source=source_id, target=target_id, cutoff=8))
     except (nx.NetworkXNoPath, nx.NodeNotFound):
         return []
 
-
 def find_highest_risk_path(G: nx.DiGraph) -> Optional[Dict]:
-    """Find the highest-risk path across all node pairs (samples up to 50 pairs)."""
     if G.number_of_nodes() < 2:
         return None
 
@@ -254,13 +190,7 @@ def find_highest_risk_path(G: nx.DiGraph) -> Optional[Dict]:
         "hops":       len(best_path) - 1,
     }
 
-
-# ══════════════════════════════════════════════════════════════════════════════
-#  CENTRALITY
-# ══════════════════════════════════════════════════════════════════════════════
-
 def compute_centrality(G: nx.DiGraph) -> Dict[int, float]:
-    """Betweenness centrality to identify critical bridge nodes."""
     if G.number_of_nodes() < 2:
         return {}
     try:

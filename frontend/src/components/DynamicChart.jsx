@@ -1,13 +1,3 @@
-/**
- * DynamicChart.jsx
- * ----------------
- * Universal Agentic UI: renders any chart type the AI specifies.
- * Supports: pie, bar, line, area, donut (pie with innerRadius)
- *
- * The AI emits a ui_command like:
- * { "action": "render_chart", "chartType": "pie", "title": "...", "data": [...] }
- * This component renders it beautifully inside the chat window.
- */
 
 import {
   PieChart, Pie, Cell,
@@ -99,7 +89,6 @@ export default function DynamicChart({ config }) {
       );
     }
 
-    // Default: bar chart
     const keys = data.length > 0 ? Object.keys(data[0]).filter(k => k !== 'name' && k !== 'label') : ['value'];
     const nameKey = data[0]?.name !== undefined ? 'name' : 'label';
     return (
@@ -123,7 +112,7 @@ export default function DynamicChart({ config }) {
         background: 'var(--surface-2)',
       }}
     >
-      {/* Header */}
+      
       <div
         className="flex items-center gap-2 border-b px-4 py-2.5"
         style={{ borderColor: 'rgba(99,102,241,0.15)', background: 'var(--surface)' }}
@@ -140,7 +129,6 @@ export default function DynamicChart({ config }) {
         </span>
       </div>
 
-      {/* Chart */}
       <div className="p-4">
         <ResponsiveContainer width="100%" height={260}>
           {renderChart()}

@@ -2,9 +2,6 @@ import json
 from gemini_config import create_model, get_api_key
 
 def reflect_on_results(goal: str, results: dict) -> dict:
-    """
-    Use Gemini to analyze results and output structured JSON with confidence and priority.
-    """
     if not get_api_key():
         return {"confidence": "Low", "error": "Missing API Key"}
 

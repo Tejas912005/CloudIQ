@@ -1,15 +1,3 @@
-"""
-services/recommendation_service.py
-------------------------------------
-Recommendation engine for CloudIQ v2.
-Merges CloudIQ recommendation logic with Cloud_Project security analysis.
-
-Categories:
-  cost        → idle termination, right-sizing, downsize opportunities
-  performance → scale up over-utilized, restart long-running
-  security    → disable public access, reduce connectivity, add encryption
-  graph       → segment high-connectivity nodes, isolate high-risk chains
-"""
 
 import logging
 import time
@@ -23,14 +11,8 @@ logger = logging.getLogger("cloudiq.recommendation_service")
 
 PRIORITY_ORDER = {"High": 0, "Medium": 1, "Low": 2}
 
-# ── In-memory cache (60s TTL) ─────────────────────────────────────────────────
 _rec_cache: dict = {"result": None, "ts": 0.0}
-CACHE_TTL = 60  # seconds
-
-
-# ══════════════════════════════════════════════════════════════════════════════
-#  COST RECOMMENDATIONS
-# ══════════════════════════════════════════════════════════════════════════════
+CACHE_TTL = 60
 
 def _cost_recommendations(resources: List[CloudResource]) -> List[Dict]:
     recs = []
@@ -56,7 +38,7 @@ def _cost_recommendations(resources: List[CloudResource]) -> List[Dict]:
                 "reason":            f"CPU {r.cpu_usage:.0f}% and memory {r.memory_usage:.0f}%. Scale up to prevent failure.",
                 "priority":          "High",
                 "category":          "performance",
-                "estimated_savings": round(-monthly * 0.15, 2),  # cost increase to prevent bigger loss
+                "estimated_savings": round(-monthly * 0.15, 2),
                 "resource_id":       r.id,
             })
         elif r.cpu_usage and r.cpu_usage < 30 and r.memory_usage and r.memory_usage < 35:
@@ -85,16 +67,7 @@ def _cost_recommendations(resources: List[CloudResource]) -> List[Dict]:
 
     return recs
 
-
-# ══════════════════════════════════════════════════════════════════════════════
-#  SECURITY / GRAPH RECOMMENDATIONS
-# ══════════════════════════════════════════════════════════════════════════════
-
 def _security_recommendations(db: Session, resources: List[CloudResource]) -> List[Dict]:
-    """
-    Graph-aware security recommendations.
-    Checks public_access, sensitivity, high connectivity, and error rates.
-    """
     try:
         G = build_graph(db)
     except Exception:
@@ -165,18 +138,7 @@ def _security_recommendations(db: Session, resources: List[CloudResource]) -> Li
 
     return recs
 
-
-# ══════════════════════════════════════════════════════════════════════════════
-#  COMBINED RECOMMENDATION ENGINE
-# ══════════════════════════════════════════════════════════════════════════════
-
 def generate_recommendations(db: Session) -> Dict:
-    """
-    Run all recommendation checks and persist results to DB.
-    Returns sorted list + total potential savings.
-    Results are cached for 60 seconds to prevent DB thrashing on every poll.
-    """
-    # ── Cache hit: skip expensive DB delete+reinsert ──────────────────────────
     if _rec_cache["result"] and time.time() - _rec_cache["ts"] < CACHE_TTL:
         logger.info("[RECOMMEND] Returning cached recommendations")
         return _rec_cache["result"]
@@ -186,16 +148,13 @@ def generate_recommendations(db: Session) -> Dict:
     security_recs = _security_recommendations(db, resources)
     all_recs      = cost_recs + security_recs
 
-    # Sort: High → Medium → Low, then by savings desc
     all_recs.sort(key=lambda x: (
         PRIORITY_ORDER.get(x["priority"], 2),
         -x["estimated_savings"]
     ))
 
-    # Persist to DB — clear old, bulk insert new
     db.query(Recommendation).delete()
     if all_recs:
-        # Build name-to-id map to prevent N+1 query loop
         name_to_id = {r.name: r.id for r in db.query(CloudResource.name, CloudResource.id).all()}
         db.bulk_insert_mappings(
             Recommendation,
@@ -229,7 +188,6 @@ def generate_recommendations(db: Session) -> Dict:
         "count":                   len(all_recs),
     }
 
-    # \u2500\u2500 Store in cache \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
     _rec_cache["result"] = result
     _rec_cache["ts"] = time.time()
     return result

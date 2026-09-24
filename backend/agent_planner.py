@@ -2,7 +2,6 @@ import json
 from gemini_config import create_model, get_api_key
 
 def generate_plan(goal: str) -> list:
-    """Uses Gemini to decide the best sequence of tools, returning a structured JSON plan."""
     if not get_api_key():
         return []
 
@@ -33,7 +32,6 @@ def generate_plan(goal: str) -> list:
         response = model.generate_content(prompt)
         text = response.text.strip()
         
-        # Clean markdown wrappers if hallucinated
         if text.startswith("```json"):
             text = text[7:-3].strip()
         elif text.startswith("```"):
@@ -41,7 +39,6 @@ def generate_plan(goal: str) -> list:
             
         plan = json.loads(text)
         
-        # Ensure it's a list
         if isinstance(plan, list):
             return plan
         return []

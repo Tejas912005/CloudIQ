@@ -78,7 +78,6 @@ export default function Resources() {
     );
   }
 
-  // Derived insight cards (top offenders) to make this page less table-only.
   const overUtilizedResources = filtered.filter((r) => r.status === 'Over-Utilized');
   const highestCpu = [...filtered]
     .sort((a, b) => (safeNumber(b?.cpu_usage) ?? 0) - (safeNumber(a?.cpu_usage) ?? 0))
@@ -93,7 +92,7 @@ export default function Resources() {
 
   return (
     <div className="mx-auto flex max-w-[1600px] flex-col gap-5">
-      {/* Page header */}
+      
       <FadeUp>
         <div>
           <h2 style={{ fontSize: 20, fontWeight: 700, color: 'var(--text-base)', fontFamily: 'Space Grotesk, sans-serif' }}>
@@ -106,7 +105,6 @@ export default function Resources() {
         </div>
       </FadeUp>
 
-      {/* 4 stat cards */}
       <StaggerParent className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         {[
           { label: 'Total Resources', count: resources.length, color: 'var(--data)', accent: 'var(--data)' },
@@ -128,10 +126,9 @@ export default function Resources() {
         ))}
       </StaggerParent>
 
-      {/* Filter row + search â€” horizontal flex, gap 12px */}
       <FadeUp delay={0.12}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
-          {/* Status filter pills â€” gap: 8px between each button */}
+          
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
             {STATUS_FILTERS.map((status) => (
               <button
@@ -154,7 +151,6 @@ export default function Resources() {
             ))}
           </div>
 
-          {/* Search input */}
           <div style={{ position: 'relative' }}>
             <Search size={13} style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: 'var(--text-dim)', pointerEvents: 'none' }} />
             <input
@@ -180,7 +176,6 @@ export default function Resources() {
         </div>
       </FadeUp>
 
-      {/* Table */}
       <FadeUp delay={0.18}>
         <GlassPanel className="overflow-hidden" style={{ padding: 0 }}>
           <div style={{ padding: '14px 20px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>

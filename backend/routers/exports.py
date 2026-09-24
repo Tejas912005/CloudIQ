@@ -1,9 +1,3 @@
-"""
-backend/routers/exports.py
---------------------------
-Export endpoints: PDF dashboard report and Excel workbook.
-Both are now fully implemented using reportlab (PDF) and openpyxl (Excel).
-"""
 
 from __future__ import annotations
 import io
@@ -17,16 +11,8 @@ from models.models import CloudResource, CostHistory, Recommendation, AnomalyRec
 
 router = APIRouter(prefix="/api", tags=["Exports"])
 
-
 @router.post("/export/pdf", dependencies=[Depends(verify_api_key)])
 def export_pdf(db: Session = Depends(get_db)):
-    """
-    Generate a PDF dashboard report containing:
-    - Executive summary (resource counts, total cost, health breakdown)
-    - Top 10 resources by monthly cost
-    - Active recommendations
-    - Recent cost anomalies
-    """
     try:
         from reportlab.lib.pagesizes import A4
         from reportlab.lib import colors
@@ -37,7 +23,6 @@ def export_pdf(db: Session = Depends(get_db)):
             Table, TableStyle, HRFlowable,
         )
 
-        # â”€â”€ Fetch data â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
         resources    = db.query(CloudResource).all()
         recs         = db.query(Recommendation).order_by(Recommendation.priority).limit(10).all()
         anomalies    = db.query(AnomalyRecord).limit(10).all()
@@ -49,7 +34,6 @@ def export_pdf(db: Session = Depends(get_db)):
         healthy     = len(resources) - idle_count - over_count
         top_cost    = sorted(resources, key=lambda r: r.monthly_cost or 0, reverse=True)[:10]
 
-        # â”€â”€ Document setup â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
         buf  = io.BytesIO()
         doc  = SimpleDocTemplate(buf, pagesize=A4,
                                  leftMargin=2*cm, rightMargin=2*cm,
@@ -57,7 +41,6 @@ def export_pdf(db: Session = Depends(get_db)):
         styles = getSampleStyleSheet()
         story  = []
 
-        # Header
         H1 = ParagraphStyle("H1", parent=styles["Title"],
                              fontSize=22, textColor=colors.HexColor("#63b2ff"),
                              spaceAfter=4)
@@ -73,7 +56,6 @@ def export_pdf(db: Session = Depends(get_db)):
         story.append(HRFlowable(width="100%", thickness=1,
                                 color=colors.HexColor("#1e3a5f"), spaceAfter=12))
 
-        # Executive Summary
         story.append(Paragraph("Executive Summary", H2))
         summary_data = [
             ["Metric", "Value"],
@@ -86,7 +68,6 @@ def export_pdf(db: Session = Depends(get_db)):
         story.append(_make_table(summary_data))
         story.append(Spacer(1, 0.4*cm))
 
-        # Top 10 Resources by Cost
         story.append(Paragraph("Top 10 Resources by Monthly Cost", H2))
         res_data = [["Name", "Type", "Region", "Status", "Monthly Cost"]]
         for r in top_cost:
@@ -97,7 +78,6 @@ def export_pdf(db: Session = Depends(get_db)):
         story.append(_make_table(res_data))
         story.append(Spacer(1, 0.4*cm))
 
-        # Recommendations
         if recs:
             story.append(Paragraph("Active Recommendations", H2))
             rec_data = [["Resource", "Action", "Priority", "Est. Savings"]]
@@ -107,7 +87,6 @@ def export_pdf(db: Session = Depends(get_db)):
             story.append(_make_table(rec_data))
             story.append(Spacer(1, 0.4*cm))
 
-        # Recent Cost History
         if cost_history:
             story.append(Paragraph("Recent Daily Cost (Last 7 Days)", H2))
             hist_data = [["Date", "Daily Cost", "Anomaly"]]
@@ -130,9 +109,7 @@ def export_pdf(db: Session = Depends(get_db)):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"PDF generation failed: {str(e)}")
 
-
 def _make_table(data: list):
-    """Helper: styled table for PDF output."""
     from reportlab.platypus import Table, TableStyle
     from reportlab.lib import colors
 
@@ -153,16 +130,8 @@ def _make_table(data: list):
     t.setStyle(style)
     return t
 
-
 @router.post("/export/xlsx", dependencies=[Depends(verify_api_key)])
 def export_xlsx(db: Session = Depends(get_db)):
-    """
-    Generate an Excel workbook with four sheets:
-    - Resources (all columns)
-    - Cost History (90-day series)
-    - Recommendations
-    - Anomalies
-    """
     try:
         import openpyxl
         from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
@@ -175,7 +144,6 @@ def export_xlsx(db: Session = Depends(get_db)):
 
         wb = openpyxl.Workbook()
 
-        # â”€â”€ Styling helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
         HDR_FILL  = PatternFill("solid", fgColor="0D2137")
         HDR_FONT  = Font(bold=True, color="63B2FF", size=10)
         EVEN_FILL = PatternFill("solid", fgColor="0A1628")
@@ -207,7 +175,6 @@ def export_xlsx(db: Session = Depends(get_db)):
                     cell.font   = DATA_FONT
                     cell.border = THIN_BORDER
 
-        # Sheet 1: Resources
         ws1 = wb.active
         ws1.title = "Resources"
         write_sheet(ws1,
@@ -219,7 +186,6 @@ def export_xlsx(db: Session = Depends(get_db)):
               "Yes" if r.public_access else "No"] for r in resources]
         )
 
-        # Sheet 2: Cost History
         ws2 = wb.create_sheet("Cost History")
         write_sheet(ws2,
             ["Date", "Daily Cost ($)", "Anomaly"],
@@ -227,7 +193,6 @@ def export_xlsx(db: Session = Depends(get_db)):
               "Yes" if ch.is_anomaly else "No"] for ch in cost_history]
         )
 
-        # Sheet 3: Recommendations
         ws3 = wb.create_sheet("Recommendations")
         write_sheet(ws3,
             ["Resource", "Action", "Priority", "Category", "Est. Savings ($)", "Reason"],
@@ -235,7 +200,6 @@ def export_xlsx(db: Session = Depends(get_db)):
               round(r.estimated_savings or 0, 2), r.reason] for r in recs]
         )
 
-        # Sheet 4: Anomalies
         if anomalies:
             ws4 = wb.create_sheet("Anomalies")
             write_sheet(ws4,

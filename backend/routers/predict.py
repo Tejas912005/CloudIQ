@@ -1,8 +1,3 @@
-"""
-routers/predict.py
--------------------
-GET /api/predict — Cost forecast + resource risk prediction.
-"""
 
 import logging
 from fastapi import APIRouter, Depends
@@ -17,15 +12,8 @@ logger = logging.getLogger("cloudiq.router.predict")
 
 router = APIRouter(prefix="/api", tags=["Predict"])
 
-
 @router.get("/predict", response_model=PredictResponse, dependencies=[Depends(verify_api_key)])
 def predict(db: Session = Depends(get_db)):
-    """
-    ML-powered predictions:
-    - 30-day cost forecast using Linear Regression on cost history
-    - Resource risk predictions based on CPU, memory, latency, error rate, uptime
-    - Trend direction: increasing | decreasing
-    """
     try:
         data = get_full_prediction_report(db)
         logger.info(f"[PREDICT] trend={data['trend_direction']} forecast=${data['monthly_forecast']} risks={len(data['resource_risks'])}")

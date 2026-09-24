@@ -1,6 +1,5 @@
 import { motion as Motion } from 'framer-motion';
 
-/* 1. FadeUp — fades and rises with spring bounce */
 export function FadeUp({ children, delay = 0, className, style, ...props }) {
   return (
     <Motion.div
@@ -21,7 +20,6 @@ export function FadeUp({ children, delay = 0, className, style, ...props }) {
   );
 }
 
-/* 2. StaggerParent — orchestrates children to appear sequentially */
 export function StaggerParent({ children, className, style, staggerDelay = 0.07, ...props }) {
   return (
     <Motion.div
@@ -45,7 +43,6 @@ export function StaggerParent({ children, className, style, staggerDelay = 0.07,
   );
 }
 
-/* 3. StaggerChild — used inside StaggerParent */
 export function StaggerChild({ children, className, style, ...props }) {
   return (
     <Motion.div
@@ -71,8 +68,6 @@ export function StaggerChild({ children, className, style, ...props }) {
   );
 }
 
-/* 4. SpringNumber — wraps AnimatedNumber with spring motion blur effect */
-/* Used on the What-If Simulator and metric cards when values change */
 export function SpringNumber({ value, children, className, style, ...props }) {
   return (
     <Motion.span
@@ -89,7 +84,6 @@ export function SpringNumber({ value, children, className, style, ...props }) {
   );
 }
 
-/* 5. PressButton — gives physical press feedback on any button */
 export function PressButton({
   children,
   className,
@@ -118,7 +112,6 @@ export function PressButton({
   );
 }
 
-/* 6. SlideInLeft — slides in from left, for sidebar and panels */
 export function SlideInLeft({ children, delay = 0, className, style, ...props }) {
   return (
     <Motion.div
@@ -139,7 +132,6 @@ export function SlideInLeft({ children, delay = 0, className, style, ...props })
   );
 }
 
-/* 7. ScaleFade — scales up from 95% with fade, for modals and popovers */
 export function ScaleFade({ children, className, style, ...props }) {
   return (
     <Motion.div

@@ -1,16 +1,3 @@
-"""
-services/groq_service.py
-------------------------
-Groq API replaces local Ollama for production cloud deployment.
-Groq hosts Llama 3 on ultra-fast inference hardware (500+ tokens/sec).
-Completely free tier available — no credit card needed.
-
-DEPLOYMENT FIX: Ollama required localhost:11434 which is unavailable on
-Render/cloud servers. Groq provides the same Llama 3 model via a real
-cloud API endpoint, making the project 100% cloud-native.
-
-Get your free API key at: https://console.groq.com
-"""
 
 import json
 import urllib.request
@@ -26,14 +13,8 @@ logger = logging.getLogger("cloudiq.groq_service")
 GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions"
 GROQ_MODEL = settings.GROQ_MODEL if settings.GROQ_MODEL else "llama-3.3-70b-versatile"
 
-
-# _build_context_prompt is imported above from services.shared_utils
-
-
 def is_groq_active() -> bool:
-    """Returns True if a Groq API key is configured."""
     return bool(settings.GROQ_API_KEY)
-
 
 def stream_response(
     message: str,
@@ -42,10 +23,6 @@ def stream_response(
     system_prompt: Optional[str] = None,
     rag_history: Optional[str] = None,
 ) -> Iterator[str]:
-    """
-    Stream response from Groq's Llama 3 model chunk by chunk.
-    Uses OpenAI-compatible streaming API (Groq is OpenAI-compatible).
-    """
     if not is_groq_active():
         logger.warning("[GROQ] No API key — falling back to local rule-based engine.")
         yield "⚠️ Groq API key not configured. Please add GROQ_API_KEY to your .env file."
@@ -64,11 +41,9 @@ def stream_response(
             f"=== END HISTORICAL REFERENCE ==="
         )
 
-    # Build structured message array
     active_prompt = system_prompt if system_prompt else CLOUDIQ_SYSTEM_PROMPT
     messages = [{"role": "system", "content": active_prompt}]
 
-    # Inject the last 10 conversation turns
     for h in history[-10:]:
         role = "user" if h.get("role") == "user" else "assistant"
         parts = h.get("parts", [{"text": ""}])
@@ -76,7 +51,6 @@ def stream_response(
         if text:
             messages.append({"role": role, "content": text})
 
-    # Append context to the current user message
     full_message = message + context_prompt + rag_prompt
     messages.append({"role": "user", "content": full_message})
 

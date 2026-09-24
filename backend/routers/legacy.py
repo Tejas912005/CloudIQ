@@ -1,10 +1,3 @@
-"""
-routers/legacy.py
-------------------
-Backward-compatibility routes mapping old Flask endpoint paths
-to new FastAPI service calls. This avoids breaking any old frontend
-calls that still use /api/summary, /api/anomalies, etc.
-"""
 
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
@@ -18,10 +11,8 @@ from services.recommendation_service import generate_recommendations
 
 router = APIRouter(prefix="/api", tags=["Legacy (Backward Compat)"])
 
-
 @router.get("/summary", dependencies=[Depends(verify_api_key)])
 def summary(db: Session = Depends(get_db)):
-    """Legacy: was /api/summary in Flask. Maps to /api/analyze now."""
     resources = db.query(CloudResource).all()
     total = len(resources)
     idle  = sum(1 for r in resources if r.status == "Idle")
@@ -31,8 +22,6 @@ def summary(db: Session = Depends(get_db)):
     anomaly_data = detect_cost_anomalies(db)
     pred_data    = get_full_prediction_report(db)
 
-    # BUG-010 FIX: read existing Recommendation count instead of regenerating
-    # generate_recommendations() causes delete+reinsert race condition
     rec_rows = db.query(Recommendation).all()
     total_savings = sum((r.estimated_savings or 0) for r in rec_rows if (r.estimated_savings or 0) > 0)
 
@@ -49,10 +38,8 @@ def summary(db: Session = Depends(get_db)):
         "monthly_forecast":       pred_data["monthly_forecast"],
     }
 
-
 @router.get("/resources", dependencies=[Depends(verify_api_key)])
 def resources(db: Session = Depends(get_db)):
-    """Legacy: was /api/resources in Flask."""
     rows = db.query(CloudResource).all()
     return [
         {
@@ -68,27 +55,19 @@ def resources(db: Session = Depends(get_db)):
         for r in rows
     ]
 
-
 @router.get("/cost-history", dependencies=[Depends(verify_api_key)])
 def cost_history(db: Session = Depends(get_db)):
-    """Legacy: was /api/cost-history in Flask."""
     rows = db.query(CostHistory).order_by(CostHistory.date).all()
     return [{"date": r.date, "daily_cost": r.daily_cost, "is_anomaly": r.is_anomaly} for r in rows]
 
-
 @router.get("/anomalies", dependencies=[Depends(verify_api_key)])
 def anomalies(db: Session = Depends(get_db)):
-    """Legacy: was /api/anomalies in Flask."""
     return detect_cost_anomalies(db)
-
 
 @router.get("/predictions", dependencies=[Depends(verify_api_key)])
 def predictions(db: Session = Depends(get_db)):
-    """Legacy: was /api/predictions in Flask."""
     return get_full_prediction_report(db)
-
 
 @router.get("/recommendations", dependencies=[Depends(verify_api_key)])
 def recommendations(db: Session = Depends(get_db)):
-    """Legacy: was /api/recommendations in Flask."""
     return generate_recommendations(db)

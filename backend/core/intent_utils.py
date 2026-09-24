@@ -1,19 +1,10 @@
-"""
-core/intent_utils.py
---------------------
-Single canonical intent resolver for CloudIQ.
-Replaces three duplicate keyword-matching implementations that previously
-lived in chat.py, chat_controller.py, and langchain_router.py.
-"""
 
-# Keywords that should route to the agentic loop (heavy analysis)
 AGENT_KEYWORDS = [
     "what if", "simulate", "optimize", "optimize all", "run agent",
     "full analysis", "agent mode", "deep dive", "comprehensive",
     "complete analysis", "audit", "diagnose all",
 ]
 
-# Keywords that indicate a cloud data intent (analytics, not conversation)
 DATA_KEYWORDS = [
     "cost", "spending", "anomal", "predict", "forecast", "risk",
     "resource", "usage", "cpu", "memory", "utilization", "recommend",
@@ -21,37 +12,19 @@ DATA_KEYWORDS = [
     "security", "graph", "topology", "blast radius", "attack",
 ]
 
-# Greetings — handled by local fast-path, no LLM needed
 GREETING_PHRASES = {
     "hi", "hello", "hey", "hii", "hey there",
     "good morning", "good afternoon", "good evening", "yo",
 }
 
-# Identity questions — handled by local fast-path
 IDENTITY_PHRASES = [
     "who are you", "what is your name", "what is cloudiq",
     "introduce yourself", "what can you do", "help",
 ]
 
-
 def resolve_intent(message: str) -> str:
-    """
-    Classify a user message into one of the following intent strings:
-      "agent_mode"                  → triggers the multi-step agentic loop
-      "navigate_globe"              → navigates the UI to the globe view
-      "navigate_graph"              → navigates the UI to the graph view
-      "terminate_idle"              → triggers the idle termination approval card
-      "stop_risky_resources"        → triggers the risky resources shutdown card
-      "analyze_resources"           → resource health / status queries
-      "detect_anomalies"            → anomaly detection queries
-      "predict_costs"               → cost forecasting queries
-      "predict_resource_risk"        → risk scoring queries
-      "ui_theme_control"            → theme / UI commands
-      "none"                        → general conversation
-    """
     lower = message.lower().strip()
 
-    # --- Specific Agentic UI/Mutation Intents ---
     if any(kw in lower for kw in ["terminate", "kill", "shut down", "delete"]) and "idle" in lower:
         return "terminate_idle"
     if "stage action" in lower and ("terminate" in lower or "stop" in lower):

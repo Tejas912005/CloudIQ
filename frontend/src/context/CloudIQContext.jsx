@@ -8,16 +8,14 @@ export function CloudIQProvider({ children }) {
   const store = useCloudStore();
 
   useEffect(() => {
-    // Initialize Supabase auth state from existing session on app load
+    
     useCloudStore.getState().initAuth();
     store.refreshData();
 
     const timer = window.setInterval(() => store.refreshData(), POLL_INTERVAL_MS);
     return () => window.clearInterval(timer);
-    // store is a stable Zustand reference; avoid re-running effect on each render.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    
   }, []);
-
 
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', store.theme);

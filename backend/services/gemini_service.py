@@ -1,17 +1,3 @@
-"""
-services/gemini_service.py
----------------------------
-VERIFIED Gemini AI integration for CloudIQ v2.
-Uses the NEW google-genai SDK (v1.x) — replaces deprecated google-generativeai.
-
-CRITICAL FIXES applied vs. old ai_client_gemini.py:
-  1. Uses google.genai (new SDK) instead of deprecated google.generativeai
-  2. Explicit API verification on startup (live ping with logging)
-  3. Every API call is logged with timing
-  4. Structured error handling — quota, auth, network errors classified separately
-  5. Fallback to local_fallback.py only if Gemini is unreachable (not silently)
-  6. No hardcoded responses — all Gemini calls are LIVE API calls
-"""
 
 import logging
 import json
@@ -26,18 +12,9 @@ logger = logging.getLogger("cloudiq.gemini_service")
 from core.prompts import CLOUDIQ_SYSTEM_PROMPT
 SYSTEM_INSTRUCTION = CLOUDIQ_SYSTEM_PROMPT
 
-
-# ══════════════════════════════════════════════════════════════════════════════
-#  GEMINI CLIENT INITIALIZATION (using new google.genai SDK)
-# ══════════════════════════════════════════════════════════════════════════════
-
-_client = None   # google.genai.Client singleton
+_client = None
 
 def _initialize_client():
-    """
-    Initialize and verify the Gemini client using the new google.genai SDK.
-    Returns the client if successful, None otherwise.
-    """
     if not settings.gemini_available:
         logger.warning("[GEMINI] ❌ No API key found. Gemini disabled — using local fallback.")
         return None
@@ -58,23 +35,14 @@ def _initialize_client():
         logger.error(f"[GEMINI] ❌ Failed to initialize client: {e}")
         return None
 
-
 def get_client():
-    """Get or lazily initialize the Gemini client singleton."""
     global _client
     if _client is None:
         _client = _initialize_client()
     return _client
 
-
 def is_gemini_active() -> bool:
-    """Returns True if Gemini client is initialized and ready."""
     return get_client() is not None
-
-
-# ══════════════════════════════════════════════════════════════════════════════
-#  GENERATE RESPONSE  (Live Gemini API call)
-# ══════════════════════════════════════════════════════════════════════════════
 
 def _groq_fallback(
     message: str,
@@ -82,7 +50,6 @@ def _groq_fallback(
     context_data: Optional[dict] = None,
     system_prompt: Optional[str] = None,
 ) -> dict:
-    """Fallback to Groq service when Gemini fails or is inactive."""
     try:
         from services import groq_service
         import time
@@ -103,7 +70,6 @@ def _groq_fallback(
         latency_ms = round((time.perf_counter() - start) * 1000, 1)
         logger.info(f"[GROQ] ✅ Fallback response received in {latency_ms}ms ({len(groq_response)} chars)")
         
-        # Store in RAG memory
         try:
             from services import rag_memory
             rag_memory.store_interaction(message, groq_response)
@@ -120,29 +86,14 @@ def _groq_fallback(
         logger.error(f"[GROQ] Non-streaming fallback failed: {groq_err}")
         raise groq_err
 
-
 def generate_response(
     message: str,
     history: list,
     context_data: Optional[dict] = None,
     system_prompt: Optional[str] = None,
 ) -> dict:
-    """
-    Send a message to Gemini and return the response.
-    Logs every call with timing.
-    Falls back to Groq, and then local_fallback if Gemini fails.
-
-    Returns:
-        {
-          "response": str,
-          "status": "ok" | "error",
-          "mode": "gemini" | "groq" | "local_fallback",
-          "latency_ms": float
-        }
-    """
     client = get_client()
 
-    # Pre-build system prompt and full message so we can reuse them if fallback is needed
     try:
         from services import rag_memory
         past_interactions = rag_memory.retrieve_relevant_history(message, n_results=3)
@@ -179,16 +130,14 @@ def generate_response(
         from google import genai
         from google.genai import types
 
-        # Build conversation history in new SDK format
         contents = []
-        for h in history[-10:]:   # Last 10 turns
+        for h in history[-10:]:
             role = "user" if h.get("role") == "user" else "model"
             parts_list = h.get("parts", [{"text": ""}])
             text = parts_list[0].get("text", "") if parts_list else ""
             if text:
                 contents.append(types.Content(role=role, parts=[types.Part(text=text)]))
 
-        # Add current message
         contents.append(types.Content(role="user", parts=[types.Part(text=full_message)]))
 
         logger.info(f"[GEMINI] → Sending message ({len(full_message)} chars, {len(contents)} turns)...")
@@ -212,7 +161,6 @@ def generate_response(
 
         response_text = response.text
 
-        # Store interaction in RAG memory
         try:
             from services import rag_memory
             rag_memory.store_interaction(message, response_text)
@@ -239,27 +187,11 @@ def generate_response(
 
         return _local_fallback(message, context_data, error=str(e))
 
-
-
-
-# ══════════════════════════════════════════════════════════════════════════════
-# _build_context_prompt is already imported at the top of this file from
-# services.shared_utils. The canonical version lives there.
-
-
-# ══════════════════════════════════════════════════════════════════════════════
-#  LOCAL FALLBACK  (when Gemini is unavailable)
-# ══════════════════════════════════════════════════════════════════════════════
-
 def _local_fallback(
     message: str,
     context_data: Optional[dict] = None,
     error: Optional[str] = None
 ) -> dict:
-    """
-    Generate a response from the local rule-based system.
-    Only triggered when Gemini is unavailable.
-    """
     try:
         from local_fallback import generate_local_response, infer_intent_from_keywords
         intent = infer_intent_from_keywords(message)

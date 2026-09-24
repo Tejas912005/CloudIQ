@@ -6,7 +6,6 @@ API_KEY_HEADER = APIKeyHeader(name="X-API-Key", auto_error=False)
 
 async def verify_api_key(api_key: str = Security(API_KEY_HEADER)):
     expected = os.getenv("BACKEND_API_KEY")
-    # If BACKEND_API_KEY is not set in environment, allow requests (no 500 crash)
     if not expected:
         return True
     if api_key != expected:

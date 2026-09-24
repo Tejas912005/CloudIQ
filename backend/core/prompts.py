@@ -1,63 +1,25 @@
-"""
-core/prompts.py
----------------
-Modular, composable prompt system for CloudIQ.
-
-ARCHITECTURE
-============
-_BLOCK_*          Private atomic text fragments — each capability defined
-                  exactly once. Never duplicated between prompts.
-
-CSS_VARIABLES_REFERENCE
-                  Public constant — the single authoritative list of every
-                  CSS variable the UI accepts. Importable by docs or tests.
-
-*_PROMPT          Public assembled prompts — composed from blocks via
-                  "".join(). Adding a capability means adding one block and
-                  one join() call, not copy-pasting text.
-
-PROMPT_MAP        Dict[IntentType, str] — maps a classified intent to the
-                  correct system prompt. Used by API routing.
-
-build_*()         Runtime builder functions — inject live data (cloud state,
-                  RAG chunks, agent step) into a base prompt before each
-                  LLM call.
-"""
 
 from __future__ import annotations
 
 from typing import Any, Final, Literal
 
-# ─────────────────────────────────────────────────────────────────────────────
-# PUBLIC API
-# ─────────────────────────────────────────────────────────────────────────────
-
 __all__ = [
-    # Meta
     "PROMPT_VERSION",
     "IntentType",
-    # References
     "CSS_VARIABLES_REFERENCE",
-    # Assembled prompts
     "CLOUDIQ_SYSTEM_PROMPT",
     "UI_CONTROL_SYSTEM_PROMPT",
     "GENERAL_SYSTEM_PROMPT",
     "RAG_AUGMENTED_PROMPT",
     "AGENT_LOOP_PROMPT",
     "STREAMING_COMPACT_PROMPT",
-    # Dynamic builders
     "build_rag_prompt",
     "build_cloud_context_prompt",
     "build_agent_step_prompt",
 ]
 
-# ─────────────────────────────────────────────────────────────────────────────
-# VERSION & TYPE
-# ─────────────────────────────────────────────────────────────────────────────
-
 PROMPT_VERSION: Final[str] = "2.0.0"
 
-# Literal type for intent routing.
 IntentType = Literal[
     "agent_mode",
     "analyze_resources",
@@ -67,10 +29,6 @@ IntentType = Literal[
     "ui_theme_control",
     "none"
 ]
-
-# ─────────────────────────────────────────────────────────────────────────────
-# PRIVATE ATOMIC BLOCKS
-# ─────────────────────────────────────────────────────────────────────────────
 
 _PERSONA_BLOCK: Final[str] = (
     "You are CloudIQ — an autonomous cloud intelligence AI agent and UI co-pilot. "
@@ -142,10 +100,6 @@ _AGENTIC_LOOP_BLOCK: Final[str] = (
     "=== END AGENTIC LOOP BEHAVIOR ===\n"
 )
 
-# ─────────────────────────────────────────────────────────────────────────────
-# CSS VARIABLES REFERENCE
-# ─────────────────────────────────────────────────────────────────────────────
-
 CSS_VARIABLES_REFERENCE: Final[str] = (
     "Available CSS variables you MUST set (include ALL relevant ones for a complete theme change):\n"
     "  BACKGROUNDS: --bg-base, --bg-mid, --bg-card, --bg-elevated, --surface (rgba), --surface-2 (rgba), --surface-3 (rgba), --header-bg (rgba)\n"
@@ -156,10 +110,6 @@ CSS_VARIABLES_REFERENCE: Final[str] = (
     "  TYPOGRAPHY: --font-size-base (e.g. 14px, 16px, 18px), --font-family (e.g. 'Outfit', 'Inter')\n"
     "  THEME MODE: --theme ('dark' or 'light')\n"
 )
-
-# ─────────────────────────────────────────────────────────────────────────────
-# UI CONTROL BLOCK
-# ─────────────────────────────────────────────────────────────────────────────
 
 _UI_CONTROL_BLOCK: Final[str] = (
     "=== UNIVERSAL AGENTIC UI CONTROL ===\n"
@@ -197,10 +147,6 @@ _UI_CONTROL_BLOCK: Final[str] = (
     "  5. For chart requests, populate data with realistic values from the cloud context.\n"
     "=== END AGENTIC UI CONTROL ===\n"
 )
-
-# ─────────────────────────────────────────────────────────────────────────────
-# ASSEMBLED PUBLIC PROMPTS
-# ─────────────────────────────────────────────────────────────────────────────
 
 CLOUDIQ_SYSTEM_PROMPT: Final[str] = "\n".join([
     _PERSONA_BLOCK,
@@ -259,12 +205,7 @@ STREAMING_COMPACT_PROMPT: Final[str] = "\n".join([
     _LANGUAGE_RULE,
 ])
 
-# ─────────────────────────────────────────────────────────────────────────────
-# DYNAMIC PROMPT BUILDERS
-# ─────────────────────────────────────────────────────────────────────────────
-
 def build_rag_prompt(retrieved_chunks: list[str]) -> str:
-    """Inject ChromaDB retrieval results into the RAG-aware system prompt."""
     if not retrieved_chunks:
         return RAG_AUGMENTED_PROMPT
 
@@ -280,9 +221,7 @@ def build_rag_prompt(retrieved_chunks: list[str]) -> str:
     )
     return RAG_AUGMENTED_PROMPT + context_section
 
-
 def build_cloud_context_prompt(cloud_summary: dict[str, Any]) -> str:
-    """Inject a live cloud infrastructure snapshot into the main system prompt."""
     if not cloud_summary:
         return CLOUDIQ_SYSTEM_PROMPT
 
@@ -294,13 +233,11 @@ def build_cloud_context_prompt(cloud_summary: dict[str, Any]) -> str:
     )
     return CLOUDIQ_SYSTEM_PROMPT + context_section
 
-
 def build_agent_step_prompt(
     step: int,
     goal: str,
     previous_output: str = "",
 ) -> str:
-    """Build a system prompt for a single iteration of the agentic reasoning loop."""
     step_context = (
         f"\n\n=== AGENT STEP {step} / 5 ===\n"
         f"Original goal: {goal}\n"
