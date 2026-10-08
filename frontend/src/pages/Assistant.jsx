@@ -440,7 +440,7 @@ export default function Assistant() {
               }
             }
 
-            if (payload.command === 'execute_tool') {
+            if (payload.command === 'execute_tool' || payload.command === 'export_pdf') {
               setMessages((current) =>
                 current.map((item) =>
                   item.id === assistantId ? { ...item, actionCard: payload, streaming: true } : item

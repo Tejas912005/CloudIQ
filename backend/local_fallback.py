@@ -280,6 +280,12 @@ def generate_local_response(message: str, intent: str, context_data=None, db: Se
             f"```ui_command\n{cmd_json}\n```"
         )
 
+    if intent == "export_pdf" or "pdf" in message_lower:
+        return (
+            "I have compiled your up-to-date CloudIQ resource posture and audit metrics into a structured, systematic PDF document. "
+            "Click the download button on the card below to save your official PDF report."
+        )
+
     if intent == "analyze_resources":
         return _format_resource_analysis(context_data or get_tool_data("analyze_resources", db))
     if intent == "detect_anomalies":
