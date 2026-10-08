@@ -88,29 +88,6 @@ def stream_routed_response(
     from local_fallback import infer_intent_from_keywords, generate_local_response
     message_lower = message.strip().lower()
     full_response = ""
-    
-    is_greeting = message_lower in GREETING_PHRASES
-    is_identity = any(q in message_lower for q in IDENTITY_PHRASES)
-    is_help = any(q in message_lower for q in ["capabilities", "what can you do", "features"])
-    
-    import re
-    is_math = False
-    math_match = re.search(r'(?:what\s+is\s+)?([0-9\s+\-*/().]+)(?:\?)?$', message_lower)
-    if math_match:
-        expr = math_match.group(1).replace(" ", "")
-        if any(op in expr for op in ["+", "-", "*", "/"]):
-            allowed_chars = set("0123456789+-*/().")
-            if all(c in allowed_chars for c in expr):
-                is_math = True
-                
-    if is_greeting or is_identity or is_help or is_math:
-        logger.info(f"[ROUTER] Fast-path local match for: '{message}'")
-        fallback_intent = infer_intent_from_keywords(message)
-        response = generate_local_response(message, fallback_intent, context_data, db=db)
-        yield response
-        if response.strip():
-            rag_memory.store_interaction(message, response)
-        return
     data_intents = {"analyze_resources", "detect_anomalies", "predict_costs", "predict_resource_risk", "agent_mode"}
     relevant_history = rag_memory.retrieve_relevant_history(message) if intent in data_intents else []
     rag_history_text = ""
