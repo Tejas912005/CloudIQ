@@ -31,6 +31,9 @@ def resolve_intent(message: str) -> str:
         return "terminate_idle"
     if any(kw in lower for kw in ["stop", "terminate", "kill", "shut down", "disable"]) and any(kw in lower for kw in ["risky", "unhealthy", "overutilized", "over-utilized", "over utilized"]):
         return "stop_risky_resources"
+    if any(kw in lower for kw in ["pdf", "download pdf", "export pdf", "make a pdf", "generate pdf", "pdf report"]):
+        return "export_pdf"
+
     if "globe" in lower or "map" in lower:
         return "navigate_globe"
     if "graph" in lower or "network" in lower:

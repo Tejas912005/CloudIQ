@@ -1,7 +1,7 @@
 import { lazy, Suspense, useEffect, useRef, useState } from 'react';
 import { useLocation } from 'react-router-dom';
 import { UploadCloud } from 'lucide-react';
-import { CheckCircle2, Loader2, SendHorizonal, ShieldAlert, Trash2 } from 'lucide-react';
+import { CheckCircle2, Download, FileText, Loader2, SendHorizonal, ShieldAlert, Trash2 } from 'lucide-react';
 import { AnimatePresence, motion as Motion } from 'framer-motion';
 import { fetchJson, getErrorMessage, getApiBase } from '../lib/api';
 import {
@@ -46,10 +46,34 @@ function ActionCard({ card }) {
   const [status, setStatus] = useState('pending');
   const [resultMsg, setResultMsg] = useState('');
 
+  const isPdf = card.command === 'export_pdf' || card.endpoint === '/api/export/pdf';
+
   const execute = async () => {
     setStatus('executing');
     const API_BASE = getApiBase();
     try {
+      if (isPdf) {
+        const res = await fetch(`${API_BASE}${card.endpoint || '/api/export/pdf'}`, {
+          method: 'POST',
+          headers: {
+            'X-API-Key': import.meta.env.VITE_API_KEY,
+          },
+        });
+        if (!res.ok) throw new Error('Failed to generate PDF');
+        const blob = await res.blob();
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = card.filename || 'CloudIQ_Resource_Report.pdf';
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        window.URL.revokeObjectURL(url);
+        setStatus('success');
+        setResultMsg('PDF report generated and downloaded successfully.');
+        return;
+      }
+
       const res = await fetch(`${API_BASE}${card.endpoint}`, {
         method: 'POST',
         headers: {
@@ -68,7 +92,7 @@ function ActionCard({ card }) {
       }
     } catch {
       setStatus('error');
-      setResultMsg('Network error executing command.');
+      setResultMsg(isPdf ? 'Error downloading PDF report.' : 'Network error executing command.');
     }
   };
 
@@ -81,10 +105,21 @@ function ActionCard({ card }) {
         className="flex items-center gap-2 border-b px-4 py-2.5"
         style={{ borderColor: 'var(--border)', background: 'var(--surface)' }}
       >
-        <ShieldAlert className="h-4 w-4" style={{ color: 'var(--warning)' }} />
-        <span className="text-sm font-semibold" style={{ color: 'var(--text-base)' }}>
-          Agentic Execution Required
-        </span>
+        {isPdf ? (
+          <>
+            <Download className="h-4 w-4" style={{ color: 'var(--accent)' }} />
+            <span className="text-sm font-semibold" style={{ color: 'var(--text-base)' }}>
+              Official PDF Audit Export
+            </span>
+          </>
+        ) : (
+          <>
+            <ShieldAlert className="h-4 w-4" style={{ color: 'var(--warning)' }} />
+            <span className="text-sm font-semibold" style={{ color: 'var(--text-base)' }}>
+              Agentic Execution Required
+            </span>
+          </>
+        )}
       </div>
       <div className="p-4">
         <h4 className="text-base font-semibold" style={{ color: 'var(--text-base)' }}>{card.title}</h4>
@@ -93,18 +128,20 @@ function ActionCard({ card }) {
         {status === 'pending' && (
           <div className="mt-4 flex flex-wrap gap-3">
             <PressButton onClick={execute} className="btn-primary" type="button">
-              Approve & Execute
+              {isPdf ? '📥 Download PDF Report' : 'Approve & Execute'}
             </PressButton>
-            <PressButton onClick={() => setStatus('error')} className="btn-ghost" type="button">
-              Reject
-            </PressButton>
+            {!isPdf && (
+              <PressButton onClick={() => setStatus('error')} className="btn-ghost" type="button">
+                Reject
+              </PressButton>
+            )}
           </div>
         )}
 
         {status === 'executing' && (
           <div className="mt-4 flex items-center gap-2 text-sm font-medium" style={{ color: 'var(--text-base)' }}>
             <Loader2 className="h-4 w-4 animate-spin" style={{ color: 'var(--accent)' }} />
-            Executing via CloudIQ Agent...
+            {isPdf ? 'Generating PDF Document...' : 'Executing via CloudIQ Agent...'}
           </div>
         )}
 
@@ -115,7 +152,7 @@ function ActionCard({ card }) {
           >
             <div className="flex items-center gap-2 text-sm font-semibold" style={{ color: 'var(--success)' }}>
               <CheckCircle2 className="h-4 w-4" />
-              Execution Complete
+              {isPdf ? 'Download Complete' : 'Execution Complete'}
             </div>
             <p className="text-xs" style={{ color: 'var(--text-muted)' }}>{resultMsg}</p>
           </div>
@@ -128,7 +165,7 @@ function ActionCard({ card }) {
           >
             <div className="flex items-center gap-2 text-sm font-semibold" style={{ color: 'var(--danger)' }}>
               <ShieldAlert className="h-4 w-4" />
-              Execution Rejected or Failed
+              {isPdf ? 'PDF Generation Failed' : 'Execution Rejected or Failed'}
             </div>
             {resultMsg && <p className="text-xs" style={{ color: 'var(--text-muted)' }}>{resultMsg}</p>}
           </div>

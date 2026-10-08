@@ -11,6 +11,9 @@ def infer_intent_from_keywords(message: str) -> str:
         return "navigate_globe"
     if "graph" in text or "network" in text:
         return "navigate_graph"
+    if any(keyword in text for keyword in ["pdf", "download pdf", "export pdf", "make a pdf", "generate pdf"]):
+        return "export_pdf"
+
     if any(keyword in text for keyword in ["chart", "graph", "pie", "piechart", "donut", "bar chart", "line chart", "area chart", "plot"]):
         return "render_chart"
 

@@ -20,112 +20,139 @@ def export_pdf(db: Session = Depends(get_db)):
         from reportlab.lib.units import cm
         from reportlab.platypus import (
             SimpleDocTemplate, Paragraph, Spacer,
-            Table, TableStyle, HRFlowable,
+            Table, TableStyle, HRFlowable, KeepTogether
         )
 
         resources    = db.query(CloudResource).all()
-        recs         = db.query(Recommendation).order_by(Recommendation.priority).limit(10).all()
+        recs         = db.query(Recommendation).order_by(Recommendation.priority).all()
         anomalies    = db.query(AnomalyRecord).limit(10).all()
         cost_history = db.query(CostHistory).order_by(CostHistory.date.desc()).limit(7).all()
 
         total_cost  = round(sum(r.monthly_cost or 0 for r in resources), 2)
+        total_savings = round(sum(r.estimated_savings or 0 for r in recs), 2)
         idle_count  = sum(1 for r in resources if r.status == "Idle")
         over_count  = sum(1 for r in resources if r.status == "Over-Utilized")
         healthy     = len(resources) - idle_count - over_count
-        top_cost    = sorted(resources, key=lambda r: r.monthly_cost or 0, reverse=True)[:10]
+        sorted_res  = sorted(resources, key=lambda r: r.monthly_cost or 0, reverse=True)
 
         buf  = io.BytesIO()
         doc  = SimpleDocTemplate(buf, pagesize=A4,
-                                 leftMargin=2*cm, rightMargin=2*cm,
-                                 topMargin=2*cm, bottomMargin=2*cm)
+                                 leftMargin=1.5*cm, rightMargin=1.5*cm,
+                                 topMargin=1.8*cm, bottomMargin=1.8*cm)
         styles = getSampleStyleSheet()
         story  = []
 
-        H1 = ParagraphStyle("H1", parent=styles["Title"],
-                             fontSize=22, textColor=colors.HexColor("#63b2ff"),
-                             spaceAfter=4)
+        TITLE_STYLE = ParagraphStyle("TitleStyle", parent=styles["Title"],
+                             fontSize=20, textColor=colors.HexColor("#0f172a"),
+                             fontName="Helvetica-Bold", spaceAfter=2, alignment=0)
+        SUBTITLE_STYLE = ParagraphStyle("SubTitleStyle", parent=styles["Normal"],
+                              fontSize=10, textColor=colors.HexColor("#64748b"),
+                              fontName="Helvetica", spaceAfter=6)
         H2 = ParagraphStyle("H2", parent=styles["Heading2"],
-                             fontSize=13, textColor=colors.HexColor("#63b2ff"),
-                             spaceBefore=12, spaceAfter=4)
-        BODY = ParagraphStyle("BODY", parent=styles["Normal"],
-                              fontSize=9, textColor=colors.HexColor("#94a3b8"))
-        generated = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+                             fontSize=12, textColor=colors.HexColor("#0284c7"),
+                             fontName="Helvetica-Bold", spaceBefore=14, spaceAfter=6)
+        CELL_HEADER = ParagraphStyle("CellHeader", parent=styles["Normal"],
+                                  fontSize=9, textColor=colors.HexColor("#ffffff"),
+                                  fontName="Helvetica-Bold")
+        CELL_BODY = ParagraphStyle("CellBody", parent=styles["Normal"],
+                                fontSize=8, textColor=colors.HexColor("#334155"),
+                                fontName="Helvetica")
+        CELL_BODY_BOLD = ParagraphStyle("CellBodyBold", parent=styles["Normal"],
+                                    fontSize=8, textColor=colors.HexColor("#0f172a"),
+                                    fontName="Helvetica-Bold")
+        
+        generated = datetime.now(timezone.utc).strftime("%B %d, %Y - %H:%M UTC")
 
-        story.append(Paragraph("CloudIQ Dashboard Report", H1))
-        story.append(Paragraph(f"Generated: {generated}", BODY))
-        story.append(HRFlowable(width="100%", thickness=1,
-                                color=colors.HexColor("#1e3a5f"), spaceAfter=12))
+        story.append(Paragraph("CloudIQ Infrastructure & Resource Audit Report", TITLE_STYLE))
+        story.append(Paragraph(f"Generated On: {generated}  |  Environment: Production Cloud Telemetry", SUBTITLE_STYLE))
+        story.append(HRFlowable(width="100%", thickness=1.5,
+                                color=colors.HexColor("#0284c7"), spaceAfter=10))
 
-        story.append(Paragraph("Executive Summary", H2))
-        summary_data = [
-            ["Metric", "Value"],
-            ["Total Resources",       str(len(resources))],
-            ["Healthy",               str(healthy)],
-            ["Idle (waste candidate)", str(idle_count)],
-            ["Over-Utilized",         str(over_count)],
-            ["Total Monthly Cost",    f"${total_cost:,.2f}"],
+        story.append(Paragraph("1. Executive Posture Summary", H2))
+        summary_rows = [
+            [Paragraph("Executive Metric", CELL_HEADER), Paragraph("Current System Status", CELL_HEADER)],
+            [Paragraph("Total Resources Scanned", CELL_BODY), Paragraph(str(len(resources)), CELL_BODY_BOLD)],
+            [Paragraph("Healthy Workloads", CELL_BODY), Paragraph(f"{healthy} / {len(resources)} ({(healthy/max(len(resources),1)*100):.0f}%)", CELL_BODY)],
+            [Paragraph("Idle Resources (Waste Candidates)", CELL_BODY), Paragraph(str(idle_count), CELL_BODY_BOLD)],
+            [Paragraph("Over-Utilized Resources (Performance Risks)", CELL_BODY), Paragraph(str(over_count), CELL_BODY_BOLD)],
+            [Paragraph("Total Monthly Spend", CELL_BODY), Paragraph(f"${total_cost:,.2f}", CELL_BODY_BOLD)],
+            [Paragraph("Modeled Potential Monthly Savings", CELL_BODY), Paragraph(f"${total_savings:,.2f}", CELL_BODY_BOLD)],
         ]
-        story.append(_make_table(summary_data))
-        story.append(Spacer(1, 0.4*cm))
+        story.append(_make_table(summary_rows, col_widths=[220, 280], is_header=True))
+        story.append(Spacer(1, 0.3*cm))
 
-        story.append(Paragraph("Top 10 Resources by Monthly Cost", H2))
-        res_data = [["Name", "Type", "Region", "Status", "Monthly Cost"]]
-        for r in top_cost:
-            res_data.append([
-                r.name, r.resource_type, r.region,
-                r.status, f"${r.monthly_cost:,.2f}"
+        story.append(Paragraph("2. Complete Cloud Resource Inventory", H2))
+        res_rows = [
+            [Paragraph("Name", CELL_HEADER), Paragraph("Type", CELL_HEADER), Paragraph("Region", CELL_HEADER), Paragraph("Status", CELL_HEADER), Paragraph("CPU%", CELL_HEADER), Paragraph("Cost ($/mo)", CELL_HEADER)]
+        ]
+        for r in sorted_res:
+            res_rows.append([
+                Paragraph(r.name, CELL_BODY_BOLD),
+                Paragraph(r.resource_type, CELL_BODY),
+                Paragraph(r.region, CELL_BODY),
+                Paragraph(r.status, CELL_BODY),
+                Paragraph(f"{round(r.cpu_usage or 0, 1)}%", CELL_BODY),
+                Paragraph(f"${r.monthly_cost:,.2f}", CELL_BODY_BOLD)
             ])
-        story.append(_make_table(res_data))
-        story.append(Spacer(1, 0.4*cm))
+        story.append(_make_table(res_rows, col_widths=[120, 90, 80, 80, 50, 80], is_header=True))
+        story.append(Spacer(1, 0.3*cm))
 
         if recs:
-            story.append(Paragraph("Active Recommendations", H2))
-            rec_data = [["Resource", "Action", "Priority", "Est. Savings"]]
-            for r in recs:
+            story.append(Paragraph("3. Recommended Optimization Actions", H2))
+            rec_rows = [
+                [Paragraph("Priority", CELL_HEADER), Paragraph("Resource Target", CELL_HEADER), Paragraph("Action Plan", CELL_HEADER), Paragraph("Est. Monthly Savings", CELL_HEADER)]
+            ]
+            for r in recs[:8]:
                 savings = f"${r.estimated_savings:,.2f}" if r.estimated_savings else "-"
-                rec_data.append([r.resource_name, r.action[:60], r.priority, savings])
-            story.append(_make_table(rec_data))
-            story.append(Spacer(1, 0.4*cm))
+                rec_rows.append([
+                    Paragraph(r.priority, CELL_BODY_BOLD),
+                    Paragraph(r.resource_name, CELL_BODY_BOLD),
+                    Paragraph(r.action[:80], CELL_BODY),
+                    Paragraph(savings, CELL_BODY_BOLD)
+                ])
+            story.append(_make_table(rec_rows, col_widths=[60, 110, 230, 100], is_header=True))
+            story.append(Spacer(1, 0.3*cm))
 
         if cost_history:
-            story.append(Paragraph("Recent Daily Cost (Last 7 Days)", H2))
-            hist_data = [["Date", "Daily Cost", "Anomaly"]]
+            story.append(Paragraph("4. Recent Daily Spend Motion (Last 7 Days)", H2))
+            hist_rows = [
+                [Paragraph("Date", CELL_HEADER), Paragraph("Daily Spend ($)", CELL_HEADER), Paragraph("Anomaly Status", CELL_HEADER)]
+            ]
             for ch in reversed(cost_history):
-                hist_data.append([
-                    ch.date,
-                    f"${ch.daily_cost:,.2f}",
-                    "Yes" if ch.is_anomaly else "No",
+                hist_rows.append([
+                    Paragraph(ch.date, CELL_BODY),
+                    Paragraph(f"${ch.daily_cost:,.2f}", CELL_BODY_BOLD),
+                    Paragraph("Cost Spike Anomaly" if ch.is_anomaly else "Normal", CELL_BODY)
                 ])
-            story.append(_make_table(hist_data))
+            story.append(_make_table(hist_rows, col_widths=[150, 170, 180], is_header=True))
 
         doc.build(story)
         buf.seek(0)
         return Response(
             content=buf.read(),
             media_type="application/pdf",
-            headers={"Content-Disposition": "attachment; filename=cloudiq_report.pdf"},
+            headers={"Content-Disposition": "attachment; filename=CloudIQ_Resource_Report.pdf"},
         )
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"PDF generation failed: {str(e)}")
 
-def _make_table(data: list):
+def _make_table(data: list, col_widths=None, is_header=True):
     from reportlab.platypus import Table, TableStyle
     from reportlab.lib import colors
 
-    t = Table(data, hAlign="LEFT")
+    t = Table(data, colWidths=col_widths, hAlign="LEFT")
     style = TableStyle([
-        ("BACKGROUND",  (0, 0), (-1, 0),  colors.HexColor("#0d2137")),
-        ("TEXTCOLOR",   (0, 0), (-1, 0),  colors.HexColor("#63b2ff")),
-        ("FONTSIZE",    (0, 0), (-1, 0),  9),
-        ("FONTSIZE",    (0, 1), (-1, -1), 8),
-        ("TEXTCOLOR",   (0, 1), (-1, -1), colors.HexColor("#94a3b8")),
-        ("ROWBACKGROUNDS", (0, 1), (-1, -1),
-         [colors.HexColor("#0a1628"), colors.HexColor("#0d1f38")]),
-        ("GRID",        (0, 0), (-1, -1), 0.3, colors.HexColor("#1e3a5f")),
-        ("TOPPADDING",  (0, 0), (-1, -1), 4),
-        ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
+        ("BACKGROUND",  (0, 0), (-1, 0),  colors.HexColor("#0f172a")),
+        ("TEXTCOLOR",   (0, 0), (-1, 0),  colors.HexColor("#ffffff")),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 5),
+        ("TOPPADDING",  (0, 0), (-1, -1), 5),
         ("LEFTPADDING", (0, 0), (-1, -1), 6),
+        ("RIGHTPADDING", (0, 0), (-1, -1), 6),
+        ("ROWBACKGROUNDS", (0, 1), (-1, -1),
+         [colors.HexColor("#ffffff"), colors.HexColor("#f8fafc")]),
+        ("GRID",        (0, 0), (-1, -1), 0.5, colors.HexColor("#e2e8f0")),
+        ("VALIGN",      (0, 0), (-1, -1), "MIDDLE"),
     ])
     t.setStyle(style)
     return t

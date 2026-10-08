@@ -216,6 +216,19 @@ def chat_stream_endpoint(req: ChatRequest, db: Session = Depends(get_db)):
             yield event({"type": "done", "intent": intent})
             return
 
+        elif intent == "export_pdf":
+            yield event({"type": "token", "text": "I have compiled your up-to-date CloudIQ resource posture and audit metrics into a structured, systematic PDF document. Click below to download your official PDF report:\n\n"})
+            yield event({
+                "type": "action",
+                "command": "export_pdf",
+                "title": "Download Official CloudIQ Resource Audit PDF",
+                "description": "Comprehensive, structured PDF summary featuring real-time resource inventory, cost breakdown, risk scores, and active optimization recommendations.",
+                "endpoint": "/api/export/pdf",
+                "filename": "CloudIQ_Resource_Report.pdf"
+            })
+            yield event({"type": "done", "intent": intent})
+            return
+
         elif intent == "terminate_idle":
             idle_resources = db.query(CloudResource).filter(CloudResource.status == "Idle").all()
             idle_count = len(idle_resources)
