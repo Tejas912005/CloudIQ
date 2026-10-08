@@ -325,7 +325,10 @@ def chat_stream_endpoint(req: ChatRequest, db: Session = Depends(get_db)):
             logger.error(f"[CHAT/STREAM] AI stream failed, using local fallback: {stream_err}")
             from local_fallback import generate_local_response, infer_intent_from_keywords
             fallback_intent = infer_intent_from_keywords(message)
-            fallback_text = generate_local_response(message, fallback_intent, context_data, db=db)
+            fallback_raw = generate_local_response(message, fallback_intent, context_data, db=db)
+            fallback_text, fallback_actions = parse_stream_buffer(fallback_raw, is_final=True)
+            for action in fallback_actions:
+                yield event({"type": "action", "command": "ui_control", "payload": action})
             full_buffer = fallback_text
             yield event({"type": "token", "text": fallback_text})
 

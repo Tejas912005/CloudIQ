@@ -24,14 +24,17 @@ export default function DynamicChart({ config }) {
   const { chartType = 'bar', title = 'Chart', data = [] } = config;
 
   const renderChart = () => {
+    const nameKey = data[0]?.name !== undefined ? 'name' : (data[0]?.label !== undefined ? 'label' : 'name');
+    const valueKey = data[0]?.value !== undefined ? 'value' : (data.length > 0 ? Object.keys(data[0]).find(k => k !== 'name' && k !== 'label') || 'value' : 'value');
+
     if (chartType === 'pie' || chartType === 'donut') {
       const innerRadius = chartType === 'donut' ? '55%' : '0%';
       return (
         <PieChart>
           <Pie
             data={data}
-            dataKey="value"
-            nameKey="name"
+            dataKey={valueKey}
+            nameKey={nameKey}
             cx="50%"
             cy="50%"
             outerRadius="75%"
@@ -45,33 +48,31 @@ export default function DynamicChart({ config }) {
             ))}
           </Pie>
           <Tooltip contentStyle={TOOLTIP_STYLE} />
-          <Legend
-            wrapperStyle={{ fontSize: '12px', color: '#94a3b8' }}
-          />
+          <Legend wrapperStyle={{ fontSize: '12px', color: '#94a3b8' }} />
         </PieChart>
       );
     }
 
     if (chartType === 'line') {
-      const keys = data.length > 0 ? Object.keys(data[0]).filter(k => k !== 'name') : [];
+      const keys = data.length > 0 ? Object.keys(data[0]).filter(k => k !== 'name' && k !== 'label') : [valueKey];
       return (
         <LineChart data={data}>
-          <XAxis dataKey="name" stroke="#475569" tick={{ fontSize: 11, fill: '#94a3b8' }} />
+          <XAxis dataKey={nameKey} stroke="#475569" tick={{ fontSize: 11, fill: '#94a3b8' }} />
           <YAxis stroke="#475569" tick={{ fontSize: 11, fill: '#94a3b8' }} />
           <Tooltip contentStyle={TOOLTIP_STYLE} />
           <Legend wrapperStyle={{ fontSize: '12px', color: '#94a3b8' }} />
           {keys.map((k, i) => (
-            <Line key={k} type="monotone" dataKey={k} stroke={PALETTE[i % PALETTE.length]} strokeWidth={2} dot={false} />
+            <Line key={k} type="monotone" dataKey={k} stroke={PALETTE[i % PALETTE.length]} strokeWidth={2} dot={{ r: 3 }} />
           ))}
         </LineChart>
       );
     }
 
     if (chartType === 'area') {
-      const keys = data.length > 0 ? Object.keys(data[0]).filter(k => k !== 'name') : [];
+      const keys = data.length > 0 ? Object.keys(data[0]).filter(k => k !== 'name' && k !== 'label') : [valueKey];
       return (
         <AreaChart data={data}>
-          <XAxis dataKey="name" stroke="#475569" tick={{ fontSize: 11, fill: '#94a3b8' }} />
+          <XAxis dataKey={nameKey} stroke="#475569" tick={{ fontSize: 11, fill: '#94a3b8' }} />
           <YAxis stroke="#475569" tick={{ fontSize: 11, fill: '#94a3b8' }} />
           <Tooltip contentStyle={TOOLTIP_STYLE} />
           <Legend wrapperStyle={{ fontSize: '12px', color: '#94a3b8' }} />
@@ -81,7 +82,7 @@ export default function DynamicChart({ config }) {
               type="monotone"
               dataKey={k}
               stroke={PALETTE[i % PALETTE.length]}
-              fill={`${PALETTE[i % PALETTE.length]}22`}
+              fill={`${PALETTE[i % PALETTE.length]}33`}
               strokeWidth={2}
             />
           ))}
@@ -89,8 +90,7 @@ export default function DynamicChart({ config }) {
       );
     }
 
-    const keys = data.length > 0 ? Object.keys(data[0]).filter(k => k !== 'name' && k !== 'label') : ['value'];
-    const nameKey = data[0]?.name !== undefined ? 'name' : 'label';
+    const keys = data.length > 0 ? Object.keys(data[0]).filter(k => k !== 'name' && k !== 'label') : [valueKey];
     return (
       <BarChart data={data} barCategoryGap="30%">
         <XAxis dataKey={nameKey} stroke="#475569" tick={{ fontSize: 11, fill: '#94a3b8' }} />
