@@ -21,7 +21,7 @@ _load_env()
 
 class Settings:
     GEMINI_API_KEY: str = os.environ.get("GEMINI_API_KEY", "").strip()
-    GEMINI_MODEL: str = os.environ.get("GEMINI_MODEL", "gemini-2.0-flash").strip()
+    GEMINI_MODEL: str = os.environ.get("GEMINI_MODEL", "gemini-3.8-flash").strip()
 
     GROQ_API_KEY: str = os.environ.get("GROQ_API_KEY", "").strip()
     GROQ_MODEL: str = os.environ.get("GROQ_MODEL", "llama3-8b-8192").strip()
