@@ -205,7 +205,17 @@ def chat_stream_endpoint(req: ChatRequest, db: Session = Depends(get_db)):
 
         yield event({"type": "thinking", "intent": intent})
         
-        if intent == "navigate_globe":
+        if intent == "greeting":
+            yield event({"type": "token", "text": "Hello! I am CloudIQ, your AI cloud architect. How can I help you optimize your infrastructure today?"})
+            yield event({"type": "done", "intent": intent})
+            return
+
+        elif intent == "identity":
+            yield event({"type": "token", "text": "I am CloudIQ, your intelligent AI cloud management assistant. I monitor your resources, track costs, detect anomalies, analyze operational risks, and automate optimizations."})
+            yield event({"type": "done", "intent": intent})
+            return
+
+        elif intent == "navigate_globe":
             yield event({"type": "action", "command": "navigate", "target": "/globe"})
             yield event({"type": "token", "text": "Initiating Agentic UI Control... Navigating to Globe View."})
             yield event({"type": "done", "intent": intent})

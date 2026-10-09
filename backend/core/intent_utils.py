@@ -25,6 +25,12 @@ IDENTITY_PHRASES = [
 def resolve_intent(message: str) -> str:
     lower = message.lower().strip()
 
+    if lower in GREETING_PHRASES or any(lower == g or lower.startswith(g + " ") for g in GREETING_PHRASES):
+        return "greeting"
+
+    if any(phrase in lower for phrase in IDENTITY_PHRASES):
+        return "identity"
+
     if any(kw in lower for kw in ["terminate", "kill", "shut down", "delete"]) and "idle" in lower:
         return "terminate_idle"
     if "stage action" in lower and ("terminate" in lower or "stop" in lower):
